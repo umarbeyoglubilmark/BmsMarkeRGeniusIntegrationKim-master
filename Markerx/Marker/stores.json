@@ -1,0 +1,14 @@
+﻿{
+  "success": true,
+  "id": 0,
+  "message": "",
+  "errorMessage": "",
+  "faultyParameters": [],
+  "httpStatusCode": 200,
+  "statusCode": 0,
+  "statusCodeMessage": "",
+  "datas": [
+    1,
+    3
+  ]
+}
