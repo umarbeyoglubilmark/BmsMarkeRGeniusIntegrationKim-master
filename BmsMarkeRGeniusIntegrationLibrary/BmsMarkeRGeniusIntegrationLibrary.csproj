@@ -90,6 +90,7 @@
     <Compile Include="METHODS\MODELS\Bms_XXX_MarkeRGeniusIntegration_IbmKasa.cs" />
     <Compile Include="METHODS\MODELS\Bms_XXX_MarkeRGeniusIntegration_Mapping.cs" />
     <Compile Include="METHODS\MODELS\Bms_XXX_MarkeRGeniusIntegration_PaymentMapping.cs" />
+    <Compile Include="METHODS\MODELS\SalesProbeRow.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

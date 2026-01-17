@@ -45,6 +45,9 @@ namespace BmsMarkeRGeniusIntegrationCfg
                 try { te_NcrBaseUrl.Text = CFG.NCRBASEURL; } catch { }
                 try { te_NcrUsername.Text = CFG.NCRUSERNAME; } catch { }
                 try { te_NcrPassword.Text = CFG.NCRPASSWORD; } catch { }
+                try { rb_EncodingANSI.Checked = CFG.FILEENCODING == "ANSI"; rb_EncodingUTF8.Checked = CFG.FILEENCODING != "ANSI"; } catch { }
+                try { te_ItemServiceBranches.Text = CFG.ITEM_SERVICE_BRANCHES; } catch { }
+                try { te_GeniusApiPort.Text = CFG.GENIUSAPIPORT; } catch { }
             }
         }
 
@@ -89,6 +92,9 @@ namespace BmsMarkeRGeniusIntegrationCfg
                     "<NCRBASEURL>" + te_NcrBaseUrl.Text + "</NCRBASEURL>" +
                     "<NCRUSERNAME>" + te_NcrUsername.Text + "</NCRUSERNAME>" +
                     "<NCRPASSWORD>" + te_NcrPassword.Text + "</NCRPASSWORD>" +
+                    "<FILEENCODING>" + (rb_EncodingANSI.Checked ? "ANSI" : "UTF8") + "</FILEENCODING>" +
+                    "<ITEM_SERVICE_BRANCHES>" + te_ItemServiceBranches.Text + "</ITEM_SERVICE_BRANCHES>" +
+                    "<GENIUSAPIPORT>" + te_GeniusApiPort.Text + "</GENIUSAPIPORT>" +
                 "</INTEGRATION>" +
             "</BILMARKSOFTWARE>")));
 

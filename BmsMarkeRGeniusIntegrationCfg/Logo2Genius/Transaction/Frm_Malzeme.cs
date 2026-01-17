@@ -206,104 +206,167 @@ namespace BmsMarkeRGeniusIntegrationCfg.Logo2Genius.Transaction
 
         private void button2_Click(object sender, EventArgs e)
         {
-            if (gle_Value.EditValue == null)
+            try
             {
-                XtraMessageBox.Show("Lütfen Değer Seçiniz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            string fileNameFromDateTime = "PLU_" + gle_Value.EditValue.ToString() + "_" + DateTime.Now.ToString("yyyyMMddHHmmss");
-            string path = l_FilePath.Text;
-            string filePath = path + fileNameFromDateTime + ".txt";
-            var selectedRows = grv_Malzeme.GetSelectedRows();
-            if (selectedRows.Length == 0)
-            {
-                XtraMessageBox.Show("Lütfen Kayıt Seçiniz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            string g3Value = HELPER.SqlSelectLogo($@"SELECT top 1 G3Value FROM {VALUETABLE} WHERE LogoValue = '{gle_Value.EditValue}'").Rows[0][0].ToString();
-            if (string.IsNullOrEmpty(g3Value))
-            {
-                XtraMessageBox.Show("Lütfen IbmKasa Tanımlamalarından G3Value Değerini Doldurunuz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            using (StreamWriter sw = File.AppendText(filePath))
-            {
-                /*
-                 1;8690612515041;SF SOKAK SIMIT 4LU 400GR;0;SF SOKAK SIMIT 4LU 4;SF SOKAK SIMIT 4LU 4;SF SOKAK SIMIT 4LU 4;1;1;0;0;3;0;0
-2;0;8690612515041;SF SOKAK SIMIT 4LU 4;SF SOKAK SIMIT 4LU 4;SF SOKAK SIMIT 4LU 4;;0;0;0;0;0;0;0;0;0;0;0;0;0;0;1;0
-3;8690612515041;8690612515041;0;1;1;
-4;0;8690612515041;1;999.00;999.00;0
-4;0;8690612515041;2;999.00;999.00;0
-5;0;8690612515041;1;153;153
-5;0;8690612515041;2;148;148
-5;0;8690612515041;3;458;458
-5;0;8690612515041;4;0;0
-5;0;8690612515041;5;208;208
-                 
-                 */
-                for (int i = 0; i < selectedRows.Length; i++)
+                if (gle_Value.EditValue == null)
                 {
-                    string SATIR, IBMGENIUSAMBAR, CODE, BARCODE, EXPLANATION, UNIT1, SELLING_PRICE1, VAT_RATE, BUYING_PRICE1, QUANTITY, STK_TYPE, STK_GROUP, STK_SECTION, VAT_CODE,VAT_CODE_N, SPECODE, SPECODE2, SPECODE3, SPECODE4, SPECODE5;
-                    Bmsf_XXX_MarkeRGeniusIntegration_Malzemeler item = (Bmsf_XXX_MarkeRGeniusIntegration_Malzemeler)grv_Malzeme.GetRow(selectedRows[i]);
-                    string line1 = "", line2 = "", line3 = "", line4 = "", line5 = "", line6 = "", line7 = "", line8 = "", line9 = "", line10 = "";
-
-                    string sellingPrice = item.SELLING_PRICE1.ToString().Replace(",", ".");
-                    if (!sellingPrice.Contains("."))
-                        sellingPrice = sellingPrice + ".00";
-
-                    bool isSPECODEisNumeric = Int16.TryParse(item.SPECODE, out Int16 SPECODEFixed);
-                    bool isSPECODE2isNumeric = Int16.TryParse(item.SPECODE2, out Int16 SPECODE2Fixed);
-                    bool isSPECODE3isNumeric = Int16.TryParse(item.SPECODE3, out Int16 SPECODE3Fixed);
-                    bool isSPECODE4isNumeric = Int16.TryParse(item.SPECODE4, out Int16 SPECODE4Fixed);
-                    bool isSPECODE5isNumeric = Int16.TryParse(item.SPECODE5, out Int16 SPECODE5Fixed);
-                    if (!isSPECODEisNumeric) SPECODEFixed = 0;
-                    if (!isSPECODE2isNumeric) SPECODE2Fixed = 0;
-                    if (!isSPECODE3isNumeric) SPECODE3Fixed = 0;
-                    if (!isSPECODE4isNumeric) SPECODE4Fixed = 0;
-                    if (!isSPECODE5isNumeric) SPECODE5Fixed = 0;
-
-                    #region ERDENER
-                    line1 = $@"1;{item.BARCODE};{item.EXPLANATION};0;{item.EXPLANATION};{item.EXPLANATION};{item.EXPLANATION};{item.UNIT1IBM};1;0;{(item.UNIT1IBM == "1000" ? "1" : "0")};{item.VAT_CODE};{(item.UNIT1IBM == "1000" ? "1" : "0")};0";
-                    line2 = $@"2;{g3Value};{item.BARCODE};{item.EXPLANATION};{item.EXPLANATION};{item.EXPLANATION};;0;0;0;0;0;0;0;0;0;0;0;0;0;0;1;0";
-                    line3 = $@"3;{item.BARCODE};{item.BARCODE};0;1;1";
-                    line4 = $@"4;{g3Value};{item.BARCODE};1;{sellingPrice};{sellingPrice};0";
-                    line5 = $@"4;{g3Value};{item.BARCODE};2;{sellingPrice};{sellingPrice};0";
-                    line6 = $@"5;{g3Value};{item.BARCODE};1;{SPECODE3Fixed.ToString()};{item.SPECODE3}";
-                    line7 = $@"5;{g3Value};{item.BARCODE};2;{SPECODEFixed.ToString()};{item.SPECODE}";
-                    line8 = $@"5;{g3Value};{item.BARCODE};3;{SPECODE2Fixed.ToString()};{item.SPECODE2}";
-                    line9 = $@"5;{g3Value};{item.BARCODE};4;{SPECODE5Fixed.ToString()};{item.SPECODE5}";
-                    line10 = $@"5;{g3Value};{item.BARCODE};5;{SPECODE4Fixed.ToString()};{item.SPECODE4}";
-                    #endregion
-
-                    #region ERULKU
-                    line1 = $@"1;{item.BARCODE};{item.EXPLANATION};0;{item.EXPLANATION};{item.EXPLANATION};{item.EXPLANATION};{item.UNIT1IBM};1;0;{(item.UNIT1IBM == "1000" ? "1" : "0")};{item.VAT_CODE};{(item.UNIT1IBM == "1000" ? "1" : "0")};0;";
-                    line2 = $@"2;{g3Value};{item.BARCODE};{item.EXPLANATION};{item.EXPLANATION};{item.EXPLANATION};;0;0;0;0;0;0;0;0;0;0;0;0;0;0;{(item.ACTIVE == 0 ? "1" : "0")};0";
-                    line3 = $@"3;{item.BARCODE};{item.BARCODE};0;1;1;";
-                    line4 = $@"4;{g3Value};{item.BARCODE};1;{sellingPrice};{sellingPrice};0;";
-                    line5 = $@"4;{g3Value};{item.BARCODE};2;{sellingPrice};{sellingPrice};0;";
-                    line6 = $@"5;{g3Value};{item.BARCODE};1;0;{PrmControl(item.SPECODE)};";
-                    line7 = $@"5;{g3Value};{item.BARCODE};2;0;{PrmControl(item.SPECODE2)};";
-                    line8 = $@"5;{g3Value};{item.BARCODE};3;0;{PrmControl(item.SPECODE3)};";
-                    line9 = $@"5;{g3Value};{item.BARCODE};4;0;{PrmControl(item.MARKCODE)};";
-                    //line10 = $@"5;{g3Value};{item.BARCODE};5;{SPECODE4Fixed.ToString()};{item.SPECODE4};";
-                    #endregion
-
-                    sw.WriteLine(line1);
-                    sw.WriteLine(line2);
-                    if (!string.IsNullOrEmpty(item.BARCODE))
-                        sw.WriteLine(line3);
-                    sw.WriteLine(line4);
-                    sw.WriteLine(line5);
-                    sw.WriteLine(line6);
-                    sw.WriteLine(line7);
-                    sw.WriteLine(line8);
-                    sw.WriteLine(line9);
-                    //sw.WriteLine(line10);
+                    XtraMessageBox.Show("Lütfen Değer Seçiniz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
+                string fileNameFromDateTime = "PLU_" + gle_Value.EditValue.ToString() + "_" + DateTime.Now.ToString("yyyyMMddHHmmss");
+                string path = l_FilePath.Text;
+                var selectedRows = grv_Malzeme.GetSelectedRows();
+                if (selectedRows.Length == 0)
+                {
+                    XtraMessageBox.Show("Lütfen Kayıt Seçiniz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                string g3Value = HELPER.SqlSelectLogo($@"SELECT top 1 G3Value FROM {VALUETABLE} WHERE LogoValue = '{gle_Value.EditValue}'").Rows[0][0].ToString();
+                if (string.IsNullOrEmpty(g3Value))
+                {
+                    XtraMessageBox.Show("Lütfen IbmKasa Tanımlamalarından G3Value Değerini Doldurunuz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Encoding ayarını CFG'den al
+                Encoding fileEncoding = CFG.FILEENCODING == "ANSI" ? Encoding.GetEncoding(1254) : Encoding.UTF8;
+
+                // Max dosya boyutu: 10 MB
+                const long MAX_FILE_SIZE = 10 * 1024 * 1024;
+                long currentFileSize = 0;
+                int partNumber = 1;
+                int totalParts = 1;
+
+                // Dosya adı oluştur (ilk part için _part1 eklenmez, sadece birden fazla part olursa eklenir)
+                string GetFilePath(int part, bool multiPart) => multiPart
+                    ? path + fileNameFromDateTime + "_part" + part + ".txt"
+                    : path + fileNameFromDateTime + ".txt";
+
+                string currentFilePath = GetFilePath(partNumber, false);
+                StreamWriter sw = new StreamWriter(currentFilePath, false, fileEncoding);
+                List<string> createdFiles = new List<string> { currentFilePath };
+
+                try
+                {
+                    for (int i = 0; i < selectedRows.Length; i++)
+                    {
+                        Bmsf_XXX_MarkeRGeniusIntegration_Malzemeler item = (Bmsf_XXX_MarkeRGeniusIntegration_Malzemeler)grv_Malzeme.GetRow(selectedRows[i]);
+                        string line1 = "", line2 = "", line3 = "", line4 = "", line5 = "", line6 = "", line7 = "", line8 = "", line9 = "";
+
+                        // ANSI formatında \r\n karakterlerini temizle
+                        string barcode = CFG.FILEENCODING == "ANSI" ? (item.BARCODE ?? "").Replace("\r", "").Replace("\n", "") : item.BARCODE ?? "";
+                        string explanation = CFG.FILEENCODING == "ANSI" ? (item.EXPLANATION ?? "").Replace("\r", "").Replace("\n", "") : item.EXPLANATION ?? "";
+
+                        string sellingPrice = item.SELLING_PRICE1.ToString().Replace(",", ".");
+                        if (!sellingPrice.Contains("."))
+                            sellingPrice = sellingPrice + ".00";
+
+                        bool isSPECODEisNumeric = Int16.TryParse(item.SPECODE, out Int16 SPECODEFixed);
+                        bool isSPECODE2isNumeric = Int16.TryParse(item.SPECODE2, out Int16 SPECODE2Fixed);
+                        bool isSPECODE3isNumeric = Int16.TryParse(item.SPECODE3, out Int16 SPECODE3Fixed);
+                        bool isSPECODE4isNumeric = Int16.TryParse(item.SPECODE4, out Int16 SPECODE4Fixed);
+                        bool isSPECODE5isNumeric = Int16.TryParse(item.SPECODE5, out Int16 SPECODE5Fixed);
+                        if (!isSPECODEisNumeric) SPECODEFixed = 0;
+                        if (!isSPECODE2isNumeric) SPECODE2Fixed = 0;
+                        if (!isSPECODE3isNumeric) SPECODE3Fixed = 0;
+                        if (!isSPECODE4isNumeric) SPECODE4Fixed = 0;
+                        if (!isSPECODE5isNumeric) SPECODE5Fixed = 0;
+
+                        #region ERDENER
+                        line1 = $@"1;{barcode};{explanation};0;{explanation};{explanation};{explanation};{item.UNIT1IBM};1;0;{(item.UNIT1IBM == "1000" ? "1" : "0")};{item.VAT_CODE};{(item.UNIT1IBM == "1000" ? "1" : "0")};0";
+                        line2 = $@"2;{g3Value};{barcode};{explanation};{explanation};{explanation};;0;0;0;0;0;0;0;0;0;0;0;0;0;0;1;0";
+                        line3 = $@"3;{barcode};{barcode};0;1;1";
+                        line4 = $@"4;{g3Value};{barcode};1;{sellingPrice};{sellingPrice};0";
+                        line5 = $@"4;{g3Value};{barcode};2;{sellingPrice};{sellingPrice};0";
+                        line6 = $@"5;{g3Value};{barcode};1;{SPECODE3Fixed.ToString()};{item.SPECODE3}";
+                        line7 = $@"5;{g3Value};{barcode};2;{SPECODEFixed.ToString()};{item.SPECODE}";
+                        line8 = $@"5;{g3Value};{barcode};3;{SPECODE2Fixed.ToString()};{item.SPECODE2}";
+                        line9 = $@"5;{g3Value};{barcode};4;{SPECODE5Fixed.ToString()};{item.SPECODE5}";
+                        #endregion
+
+                        #region ERULKU
+                        line1 = $@"1;{barcode};{explanation};0;{explanation};{explanation};{explanation};{item.UNIT1IBM};1;0;{(item.UNIT1IBM == "1000" ? "1" : "0")};{item.VAT_CODE};{(item.UNIT1IBM == "1000" ? "1" : "0")};0;";
+                        line2 = $@"2;{g3Value};{barcode};{explanation};{explanation};{explanation};;0;0;0;0;0;0;0;0;0;0;0;0;0;0;{(item.ACTIVE == 0 ? "1" : "0")};0";
+                        line3 = $@"3;{barcode};{barcode};0;1;1;";
+                        line4 = $@"4;{g3Value};{barcode};1;{sellingPrice};{sellingPrice};0;";
+                        line5 = $@"4;{g3Value};{barcode};2;{sellingPrice};{sellingPrice};0;";
+                        line6 = $@"5;{g3Value};{barcode};1;0;{PrmControl(item.SPECODE)};";
+                        line7 = $@"5;{g3Value};{barcode};2;0;{PrmControl(item.SPECODE2)};";
+                        line8 = $@"5;{g3Value};{barcode};3;0;{PrmControl(item.SPECODE3)};";
+                        line9 = $@"5;{g3Value};{barcode};4;0;{PrmControl(item.MARKCODE)};";
+                        #endregion
+
+                        // Satırları bir listeye ekle
+                        List<string> lines = new List<string> { line1, line2 };
+                        if (!string.IsNullOrEmpty(item.BARCODE))
+                            lines.Add(line3);
+                        lines.Add(line4);
+                        lines.Add(line5);
+                        lines.Add(line6);
+                        lines.Add(line7);
+                        lines.Add(line8);
+                        lines.Add(line9);
+
+                        // Tüm satırların boyutunu hesapla
+                        long blockSize = 0;
+                        foreach (var line in lines)
+                        {
+                            blockSize += fileEncoding.GetByteCount(line + Environment.NewLine);
+                        }
+
+                        // Yeni blok eklenince 10 MB'ı aşacaksa yeni dosya oluştur
+                        if (currentFileSize > 0 && currentFileSize + blockSize > MAX_FILE_SIZE)
+                        {
+                            // Mevcut dosyayı kapat
+                            sw.Close();
+
+                            // İlk dosyayı _part1 olarak yeniden adlandır (birden fazla part varsa)
+                            if (partNumber == 1)
+                            {
+                                string newFirstFilePath = GetFilePath(1, true);
+                                File.Move(currentFilePath, newFirstFilePath);
+                                createdFiles[0] = newFirstFilePath;
+                            }
+
+                            // Yeni part numarası
+                            partNumber++;
+                            totalParts = partNumber;
+                            currentFilePath = GetFilePath(partNumber, true);
+                            createdFiles.Add(currentFilePath);
+
+                            // Yeni dosya oluştur
+                            sw = new StreamWriter(currentFilePath, false, fileEncoding);
+                            currentFileSize = 0;
+                        }
+
+                        // Satırları yaz
+                        foreach (var line in lines)
+                        {
+                            sw.WriteLine(line);
+                        }
+                        currentFileSize += blockSize;
+                    }
+                }
+                finally
+                {
+                    sw.Close();
+                }
+
+                // Her dosya için .rdy dosyası oluştur
+                foreach (var file in createdFiles)
+                {
+                    File.Create(file.Replace(".txt", ".rdy")).Close();
+                }
+
+                string message = totalParts > 1
+                    ? $"Kayıt İşlemi Tamamlandı\n{totalParts} parça dosya oluşturuldu."
+                    : "Kayıt İşlemi Tamamlandı";
+                XtraMessageBox.Show(message, "İşlem Sonucu", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            File.Create(filePath.Replace(".txt", ".rdy")).Close();
-            XtraMessageBox.Show("Kayıt İşlemi Tamamlandı ", "İşlem Sonucu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            catch (Exception ex) {
+                HELPER.LOGYAZ(ex.ToString(), null);
+                XtraMessageBox.Show("Hata oluştu: " + ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
 
@@ -311,11 +374,7 @@ namespace BmsMarkeRGeniusIntegrationCfg.Logo2Genius.Transaction
         private async void button1_Click(object sender, EventArgs e)
         {
             // Ön kontroller
-            if (gle_Value.EditValue == null)
-            {
-                XtraMessageBox.Show("Lütfen Değer Seçiniz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+       
 
             var selectedRows = grv_Malzeme.GetSelectedRows();
             if (selectedRows.Length == 0)
@@ -324,17 +383,11 @@ namespace BmsMarkeRGeniusIntegrationCfg.Logo2Genius.Transaction
                 return;
             }
 
-            string g3Value = HELPER.SqlSelectLogo($@"SELECT TOP 1 G3Value FROM {VALUETABLE} WHERE LogoValue = '{gle_Value.EditValue}'")
-                                   .Rows[0][0]?.ToString();
-            if (string.IsNullOrEmpty(g3Value))
-            {
-                XtraMessageBox.Show("Lütfen IbmKasa Tanımlamalarından G3Value Değerini Doldurunuz", "Uyarı", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
+
 
             button1.Enabled = false;
             string globaltoken = "";
-            // NCR Base URL'i config'den al
+            // Base URL'i config'den al
             AuthApi.SetBaseUrl(CFG.NCRBASEURL);
             try
             {

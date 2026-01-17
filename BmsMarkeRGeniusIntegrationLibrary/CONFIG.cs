@@ -33,6 +33,9 @@ namespace BmsMarkeRGeniusIntegrationLibrary
         public string NCRBASEURL { get; set; } = string.Empty;
         public string NCRUSERNAME { get; set; } = string.Empty;
         public string NCRPASSWORD { get; set; } = string.Empty;
+        public string FILEENCODING { get; set; } = "UTF8"; // UTF8 veya ANSI
+        public string ITEM_SERVICE_BRANCHES { get; set; } = "1,2"; // ItemService için mağaza numaraları (virgülle ayrılmış, IbmKasa tablosundaki LogoValue değerleri)
+        public string GENIUSAPIPORT { get; set; } = "9996"; // Genius API Port
     }
     public class CONFIG_HELPER
     {
@@ -105,6 +108,9 @@ namespace BmsMarkeRGeniusIntegrationLibrary
                     try { CFG.NCRBASEURL = xNodeINTEGRATION.ChildNodes[2].InnerText; } catch { }
                     try { CFG.NCRUSERNAME = xNodeINTEGRATION.ChildNodes[3].InnerText; } catch { }
                     try { CFG.NCRPASSWORD = xNodeINTEGRATION.ChildNodes[4].InnerText; } catch { }
+                    try { CFG.FILEENCODING = xNodeINTEGRATION.ChildNodes[5].InnerText; } catch { }
+                    try { CFG.ITEM_SERVICE_BRANCHES = xNodeINTEGRATION.ChildNodes[6].InnerText; } catch { }
+                    try { CFG.GENIUSAPIPORT = xNodeINTEGRATION.ChildNodes[7].InnerText; } catch { }
                 }
                 return CFG;
             }

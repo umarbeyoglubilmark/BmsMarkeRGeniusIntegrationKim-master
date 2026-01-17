@@ -3,6 +3,7 @@ using BmsMarkeRGeniusIntegrationLibrary.METHODS.MODELS;
 using DevExpress.XtraEditors;
 using System;
 using System.Drawing;
+using System.IO;
 using System.Windows.Forms;
 
 namespace BmsMarkeRGeniusIntegrationCfg
@@ -12,10 +13,19 @@ namespace BmsMarkeRGeniusIntegrationCfg
         CONFIG CFG;
         public FRM_LOGIN()
         {
-            InitializeComponent();
-            HELPER.disableResizingForm(this);
-            pe_Logo.Image = Image.FromFile(HELPER.LogoPath());
-            pe_Logo.Properties.ShowMenu = false;
+            try
+            {
+                InitializeComponent();
+                HELPER.disableResizingForm(this);
+                pe_Logo.Image = Image.FromFile(HELPER.LogoPath());
+                pe_Logo.Properties.ShowMenu = false;
+            }
+            catch (Exception ex)
+            {
+                string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "frm_login_error.log");
+                File.WriteAllText(logPath, DateTime.Now.ToString() + Environment.NewLine + ex.ToString());
+                throw;
+            }
         }
         private void sb_Login_Click(object sender, EventArgs e)
         {

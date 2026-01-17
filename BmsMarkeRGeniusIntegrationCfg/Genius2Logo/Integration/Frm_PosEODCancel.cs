@@ -397,8 +397,8 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
             try
             {
                 string sqlFormattedDate = de_Date.DateTime.ToString("MM/dd/yyyy") + " 00:00:00";
-                string sqlQuery = $@"DELETE FROM LG_125_01_INVOICE WHERE CYPHCODE = 'BMS-NCR' AND DATE_ = '{sqlFormattedDate}'";
-                string sqlQuery2 = $@"DELETE FROM LG_125_01_STFICHE WHERE CYPHCODE = 'BMS-NCR' AND DATE_ = '{sqlFormattedDate}'";
+                string sqlQuery = $@"DELETE FROM LG_126_01_INVOICE WHERE CYPHCODE = 'BMS-NCR' AND DATE_ = '{sqlFormattedDate}'";
+                string sqlQuery2 = $@"DELETE FROM LG_126_01_STFICHE WHERE CYPHCODE = 'BMS-NCR' AND DATE_ = '{sqlFormattedDate}'";
                 SplashScreenManager.ShowForm(this, typeof(PROGRESSFORM), true, true, false);
                 SplashScreenManager.Default.SetWaitFormCaption("LÜTFEN BEKLEYİN.");
                 SplashScreenManager.Default.SetWaitFormDescription("");

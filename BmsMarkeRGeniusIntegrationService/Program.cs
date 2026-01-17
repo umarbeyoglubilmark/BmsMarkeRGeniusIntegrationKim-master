@@ -1,5 +1,6 @@
 ﻿using BmsMarkeRGeniusIntegrationLibrary;
 using BmsMarkeRGeniusIntegrationLibrary.METHODS.MODELS;
+using MODELS = BmsMarkeRGeniusIntegrationLibrary.METHODS.MODELS;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -36,24 +37,57 @@ namespace BmsMarkeRGeniusIntegrationService
             {
                 HELPER.LOGYAZ("Integrations Started", null);
                 Console.WriteLine("Integrations Started");
-                HELPER.LOBJECTSKILLER();
-                DataTable branch = HELPER.SqlSelectLogo($@"SELECT NR,CAST(NR AS VARCHAR)+'-'+NAME AS NAME FROM BMS_{CFG.FIRMNR}_MarkeRGenius_Branch ORDER BY NR");
-                foreach (DataRow item in branch.Rows)
-                {
-                    string branchNr = item["NR"].ToString();
-                    string sqlFormattedDateStart = DateTime.Now.AddDays(-1).ToString("MM/dd/yyyy") + " 00:00:00";
-                    string sqlFormattedDateEnd = DateTime.Now.AddDays(-1).ToString("MM/dd/yyyy") + " 23:59:59";
 
-                    Console.WriteLine("G3 Integration Sales Started"); HELPER.LOGYAZ("G3 Integration Sales Started", null);
-                    try { G3IntegrationSales(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
-                    Console.WriteLine("G3 Integration Sales With Customer Started"); HELPER.LOGYAZ("G3 Integration Sales With Customer Started", null);
-                    try { G3IntegrationSalesWithCustomer(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
-                    Console.WriteLine("G3 Integration Payments Started"); HELPER.LOGYAZ("G3 Integration Payments Started", null);
-                    try { G3IntegrationPayments(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
-                    Console.WriteLine("G3 Integration DebtClose Started"); HELPER.LOGYAZ("G3 Integration DebtClose Started", null);
-                    try { G3IntegrationDebtClose(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
+                // Genius entegrasyonu aktif mi kontrol et
+                bool isGeniusActive = CFG.ISGENIUSACTIVE == "1";
+                // NCR entegrasyonu aktif mi kontrol et
+                bool isNcrActive = CFG.ISNCRACTIVE == "1";
+
+                HELPER.LOGYAZ($"Genius Active: {isGeniusActive}, NCR Active: {isNcrActive}", null);
+                Console.WriteLine($"Genius Active: {isGeniusActive}, NCR Active: {isNcrActive}");
+
+                if (isGeniusActive)
+                {
+                    HELPER.LOBJECTSKILLER();
+                    DataTable branch = HELPER.SqlSelectLogo($@"SELECT NR,CAST(NR AS VARCHAR)+'-'+NAME AS NAME FROM BMS_{CFG.FIRMNR}_MarkeRGenius_Branch ORDER BY NR");
+                    foreach (DataRow item in branch.Rows)
+                    {
+                        string branchNr = item["NR"].ToString();
+                        string sqlFormattedDateStart = DateTime.Now.AddDays(-1).ToString("MM/dd/yyyy") + " 00:00:00";
+                        string sqlFormattedDateEnd = DateTime.Now.AddDays(-1).ToString("MM/dd/yyyy") + " 23:59:59";
+
+                        Console.WriteLine("G3 Integration Sales Started"); HELPER.LOGYAZ("G3 Integration Sales Started", null);
+                        try { G3IntegrationSales(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
+                        Console.WriteLine("G3 Integration Sales With Customer Started"); HELPER.LOGYAZ("G3 Integration Sales With Customer Started", null);
+                        try { G3IntegrationSalesWithCustomer(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
+                        Console.WriteLine("G3 Integration Payments Started"); HELPER.LOGYAZ("G3 Integration Payments Started", null);
+                        try { G3IntegrationPayments(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
+                        Console.WriteLine("G3 Integration DebtClose Started"); HELPER.LOGYAZ("G3 Integration DebtClose Started", null);
+                        try { G3IntegrationDebtClose(branchNr, sqlFormattedDateStart, sqlFormattedDateEnd); } catch { }
+                    }
+                    try { HELPER.LOGO_LOGOUT(); } catch { }
+
+                    Console.WriteLine("G3 Integration Sales Probe Started"); HELPER.LOGYAZ("G3 Integration Sales Probe Started", null);
+                    try { G3IntegrationSalesProbe(); } catch { }
                 }
-                try { HELPER.LOGO_LOGOUT(); } catch { }
+                else
+                {
+                    HELPER.LOGYAZ("Genius integration is disabled. Skipping Genius operations.", null);
+                    Console.WriteLine("Genius integration is disabled. Skipping Genius operations.");
+                }
+
+                if (isNcrActive)
+                {
+                    // NCR entegrasyon işlemleri buraya eklenebilir
+                    HELPER.LOGYAZ("NCR integration is enabled.", null);
+                    Console.WriteLine("NCR integration is enabled.");
+                }
+                else
+                {
+                    HELPER.LOGYAZ("NCR integration is disabled. Skipping NCR operations.", null);
+                    Console.WriteLine("NCR integration is disabled. Skipping NCR operations.");
+                }
+
                 HELPER.LOGYAZ("Integrations Finished", null);
             }
             catch (Exception ex) { HELPER.LOGYAZ("HATA!", ex); }
@@ -369,6 +403,162 @@ namespace BmsMarkeRGeniusIntegrationService
             finally
             {
                 HELPER.LOGO_LOGOUT();
+            }
+        }
+
+        private static void G3IntegrationSalesProbe()
+        {
+            try
+            {
+                // Initial values
+                string storeCode = "1";
+                string posCode = "1";
+                int salesType = 0;
+                bool excludeCancelled = true;
+
+                // Tarih: bugün-1
+                var probeDate = DateTime.Now.AddDays(-1);
+
+                var baseUrl = CFG.NCRBASEURL;
+                var salesEndpoint = "api/Reports/sales";
+
+                // AuthApi base URL ayarla
+                AuthApi.SetBaseUrl(baseUrl);
+
+                // Token al
+                var tokenTask = AuthApi.GetTokenAsync(
+                    storeId: 0, posId: 0, cashierId: 0,
+                    username: CFG.NCRUSERNAME,
+                    password: CFG.NCRPASSWORD,
+                    timeout: TimeSpan.FromSeconds(30)
+                );
+                tokenTask.Wait();
+                var token = tokenTask.Result;
+
+                var handler = new System.Net.Http.HttpClientHandler { UseProxy = false, Proxy = null };
+                var http = new System.Net.Http.HttpClient(handler) { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(60) };
+                http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                http.DefaultRequestHeaders.Accept.Clear();
+                http.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+                var rows = new List<MODELS.SalesProbeRow>();
+
+                // Her iki variant için (UTC ve Local)
+                foreach (var asUtc in new[] { true, false })
+                {
+                    string bodyDate;
+                    if (asUtc)
+                    {
+                        var utcMidnight = new DateTime(probeDate.Year, probeDate.Month, probeDate.Day, 0, 0, 0, DateTimeKind.Utc);
+                        bodyDate = utcMidnight.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    else
+                    {
+                        var localMidnight = new DateTime(probeDate.Year, probeDate.Month, probeDate.Day, 0, 0, 0, DateTimeKind.Local);
+                        bodyDate = localMidnight.ToString("yyyy-MM-dd'T'HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
+                    }
+
+                    var bodyObj = new
+                    {
+                        date = bodyDate,
+                        excludeCancelledLines = excludeCancelled,
+                        storeCode,
+                        salesType,
+                        posCode
+                    };
+                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(bodyObj);
+
+                    var content = new System.Net.Http.StringContent(json, System.Text.Encoding.UTF8, "application/json");
+                    System.Net.Http.HttpResponseMessage resp = null;
+                    string respText = "";
+                    int status = 0;
+                    string reason = "", message = "", keys = "";
+                    int count = 0;
+
+                    try
+                    {
+                        var respTask = http.PostAsync(salesEndpoint, content);
+                        respTask.Wait();
+                        resp = respTask.Result;
+                        status = (int)resp.StatusCode;
+                        reason = resp.ReasonPhrase ?? "";
+                        var readTask = resp.Content.ReadAsStringAsync();
+                        readTask.Wait();
+                        respText = readTask.Result;
+
+                        var root = Newtonsoft.Json.Linq.JToken.Parse(string.IsNullOrWhiteSpace(respText) ? "{}" : respText);
+
+                        if (root is Newtonsoft.Json.Linq.JObject obj)
+                        {
+                            message = obj["message"]?.ToString()
+                                   ?? obj["errorMessage"]?.ToString()
+                                   ?? obj["statusCodeMessage"]?.ToString()
+                                   ?? "";
+
+                            keys = string.Join(",", obj.Properties().Select(p => p.Name));
+
+                            var node = obj["datas"] ?? obj["Datas"]
+                                    ?? obj["data"] ?? obj["Data"]
+                                    ?? obj.SelectToken("result.datas") ?? obj.SelectToken("result.data");
+
+                            if (node is Newtonsoft.Json.Linq.JArray arr) count = arr.Count;
+                        }
+                        else if (root is Newtonsoft.Json.Linq.JArray arrRoot)
+                        {
+                            keys = "array";
+                            count = arrRoot.Count;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        message = "EX: " + ex.Message;
+                    }
+
+                    rows.Add(new MODELS.SalesProbeRow
+                    {
+                        Date = probeDate,
+                        Variant = asUtc ? "UTC" : "Local",
+                        StatusCode = status,
+                        Message = string.IsNullOrWhiteSpace(message) ? reason : message,
+                        Keys = keys,
+                        Count = count
+                    });
+
+                    Console.WriteLine($"SalesProbe {probeDate:yyyy-MM-dd} [{(asUtc ? "UTC" : "Local")}]: Status={status}, Count={count}");
+                    HELPER.LOGYAZ($"SalesProbe {probeDate:yyyy-MM-dd} [{(asUtc ? "UTC" : "Local")}]: Status={status}, Count={count}, Message={message}", null);
+                }
+
+                // CSV dosyasına yaz
+                var csvPath = Path.Combine(_directory, $"sales-probe-{probeDate:yyyy-MM-dd}.csv");
+                using (var sw = new StreamWriter(csvPath, false, System.Text.Encoding.UTF8))
+                {
+                    sw.WriteLine("Date,Variant,StatusCode,Count,Keys,Message");
+                    foreach (var r in rows)
+                    {
+                        string esc(string s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
+                        sw.WriteLine($"{r.Date:yyyy-MM-dd},{r.Variant},{r.StatusCode},{r.Count},{esc(r.Keys)},{esc(r.Message)}");
+                    }
+                }
+                Console.WriteLine($"CSV yazıldı: {csvPath}");
+                HELPER.LOGYAZ($"SalesProbe CSV yazıldı: {csvPath}", null);
+
+                // Boş dönenler için uyarı logla
+                var empties = rows.Where(r => r.Count == 0).ToList();
+                if (empties.Count > 0)
+                {
+                    HELPER.LOGYAZ($"SalesProbe UYARI: {empties.Count} adet boş sonuç döndü!", null);
+                    foreach (var empty in empties)
+                    {
+                        HELPER.LOGYAZ($"  Boş: {empty.Date:yyyy-MM-dd} [{empty.Variant}] - {empty.Message}", null);
+                    }
+                }
+
+                http.Dispose();
+            }
+            catch (Exception ex)
+            {
+                HELPER.LOGYAZ("G3IntegrationSalesProbe HATA!", ex);
+                Console.WriteLine($"G3IntegrationSalesProbe HATA: {ex.Message}");
             }
         }
     }

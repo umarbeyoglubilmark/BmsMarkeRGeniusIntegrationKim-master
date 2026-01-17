@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -9,27 +9,27 @@ using System.Threading.Tasks;
 public static class AuthApi
 {
     private static HttpClient _http;
-    private static string _baseUrl = "http://192.168.3.10:9996/";
-
-    static AuthApi()
-    {
-        InitializeHttpClient();
-    }
+    private static string _baseUrl = "";
+    private static bool _initialized = false;
 
     private static void InitializeHttpClient()
     {
-        // DEV: TLS/Proxy/CRL beklemelerini kır
-        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+        if (string.IsNullOrEmpty(_baseUrl))
+            return;
+
+        // TLS/Proxy/CRL ayarları
+        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
         ServicePointManager.Expect100Continue = false;
         ServicePointManager.CheckCertificateRevocationList = false;
         ServicePointManager.DefaultConnectionLimit = 100;
 
+        // Sertifika doğrulamasını atla
+        ServicePointManager.ServerCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true;
+
         var handler = new HttpClientHandler
         {
             UseProxy = false,
-            CheckCertificateRevocationList = false,
-            ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            CheckCertificateRevocationList = false
         };
 
         _http = new HttpClient(handler)
@@ -40,6 +40,7 @@ public static class AuthApi
         _http.DefaultRequestHeaders.Accept.Clear();
         _http.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/json"));
+        _initialized = true;
     }
 
     public static void SetBaseUrl(string baseUrl)
@@ -53,11 +54,13 @@ public static class AuthApi
 
     public static string GetBaseUrl() => _baseUrl;
 
-
     public static async Task<string> GetTokenAsync(
         int storeId, int posId, int cashierId, string username, string password,
         TimeSpan? timeout = null, CancellationToken callerToken = default)
     {
+        if (_http == null || !_initialized)
+            throw new InvalidOperationException("AuthApi not initialized. Call SetBaseUrl first.");
+
         var body = new
         {
             storeId,
@@ -69,8 +72,8 @@ public static class AuthApi
         };
 
         var json = Newtonsoft.Json.JsonConvert.SerializeObject(body);
-         var content = new StringContent(json, Encoding.UTF8, "application/json-patch+json");
-         var cts = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+        var content = new StringContent(json, Encoding.UTF8, "application/json-patch+json");
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
         cts.CancelAfter(timeout ?? TimeSpan.FromSeconds(30));
 
         var req = new HttpRequestMessage(HttpMethod.Post, "token") { Content = content, Version = new Version(1, 1) };

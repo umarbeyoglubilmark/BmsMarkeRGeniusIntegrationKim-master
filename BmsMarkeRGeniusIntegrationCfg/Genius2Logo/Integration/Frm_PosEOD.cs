@@ -190,6 +190,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
             }
             catch (Exception ex)
             {
+                HELPER.LOGYAZ(ex.ToString(), null);
                 XtraMessageBox.Show(ex.Message, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -246,13 +247,15 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
     string dateUtcString = utcMidnight.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
     // 2) Parametreler (gerekirse CFG)
-    string storeCode = "MGZ1";
-    string posCode   = "9";
+    string storeCode = "1";
+    string posCode   = "1";
     int    salesType = 0;
     bool   excludeCancelledLines = true;
 
-    // 3) Uçlar
-    var baseUrl       = "http://192.168.3.10:9996/";
+    // 3) Uçlar - APIURL boşsa OTHERSERVER:GENIUSAPIPORT kullan
+    var baseUrl = !string.IsNullOrWhiteSpace(CFG.NCRBASEURL)
+        ? CFG.NCRBASEURL
+        : $"http://{CFG.OTHERSERVER}:{CFG.GENIUSAPIPORT}/";
     var salesEndpoint = "api/Reports/sales";
 
     // Proxy kapalı
@@ -261,10 +264,11 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
     var handler = new HttpClientHandler { UseProxy = false, Proxy = null };
 
     // 4) Token
+    AuthApi.SetBaseUrl(baseUrl);
     string token = await AuthApi.GetTokenAsync(
         storeId: 0, posId: 0, cashierId: 0,
-        username: "kasa",
-        password: "81dc9bdb52d04dc20036dbd8313ed055",
+        username: CFG.NCRUSERNAME,
+        password: CFG.NCRPASSWORD,
         timeout: TimeSpan.FromSeconds(30)
     ).ConfigureAwait(false);
 
@@ -379,12 +383,12 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
             string dateUtcString = utcMidnight.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
             // Parametreler
-            string storeCode = "MGZ1";
+            string storeCode = "1";
             int salesType = 0;
             bool excludeCancelledLines = true;
 
             // Uçlar
-            var baseUrl = "http://192.168.3.10:9996/";
+            var baseUrl = CFG.NCRBASEURL;
             var salesEndpoint = "api/Reports/sales";
 
             // Proxy kapalı
@@ -393,10 +397,11 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
             var handler = new HttpClientHandler { UseProxy = false, Proxy = null };
 
             // Token
+            AuthApi.SetBaseUrl(baseUrl);
             string token = await AuthApi.GetTokenAsync(
                 storeId: 0, posId: 0, cashierId: 0,
-                username: "kasa",
-                password: "81dc9bdb52d04dc20036dbd8313ed055",
+                username: CFG.NCRUSERNAME,
+                password: CFG.NCRPASSWORD,
                 timeout: TimeSpan.FromSeconds(30)
             ).ConfigureAwait(false);
 
@@ -407,7 +412,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
             http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             // Birden fazla posCode için dön
-            string[] posCodes = { "4","8", "9", "10", "12" };
+            string[] posCodes = { "1" };
             var failedPosCodes = new List<string>();
 
             foreach (var posCode in posCodes)
@@ -422,7 +427,11 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                     posCode
                 };
                 var json = Newtonsoft.Json.JsonConvert.SerializeObject(bodyObj);
+                var fullUrl = baseUrl.TrimEnd('/') + "/" + salesEndpoint;
+                diag.Endpoint = fullUrl;
                 diag.RequestBody = json;
+
+                HELPER.LOGYAZ($"API İSTEK - URL: {fullUrl}\nBody: {json}", null);
 
                 // Retry mekanizması (3 deneme)
                 int maxRetries = 3;
@@ -508,6 +517,178 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                 var warningMsg = $"UYARI: Aşağıdaki kasalardan veri alınamadı:\n{string.Join("\n", failedPosCodes)}\n\nDevam etmek istiyor musunuz?";
                 HELPER.LOGYAZ(warningMsg, null);
                 var result = MessageBox.Show(warningMsg, "API Veri Alma Hatası", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result == DialogResult.No)
+                {
+                    throw new Exception("Kullanıcı tarafından iptal edildi - Eksik kasa verileri");
+                }
+            }
+
+            diag.Count = allResults.Count;
+            return (allResults, diag);
+        }
+
+        // NCR için API çağrısı - AuthApi kullanır
+        private IReadOnlyList<BmsMarkeRGeniusIntegrationLibrary.HELPER.Data> PullSalesFromApiNCR()
+        {
+            var (list, diag) = PullSalesFromApiAsyncNCR(CancellationToken.None)
+                               .GetAwaiter().GetResult();
+
+            if (diag != null && (diag.Count is null || diag.Count == 0))
+                HELPER.LOGYAZ("Sales API NCR DIAG:\n" + diag, null);
+
+            return list ?? Array.Empty<BmsMarkeRGeniusIntegrationLibrary.HELPER.Data>();
+        }
+
+        private async Task<(IReadOnlyList<BmsMarkeRGeniusIntegrationLibrary.HELPER.Data> List, ApiDiag Diag)>
+    PullSalesFromApiAsyncNCR(CancellationToken ct)
+        {
+            var diag = new ApiDiag();
+            var allResults = new List<BmsMarkeRGeniusIntegrationLibrary.HELPER.Data>();
+
+            // 1) Tarih (UTC 00:00)
+            var d = de_DateStart.DateTime.Date;
+            var utcMidnight = new DateTime(d.Year, d.Month, d.Day, 0, 0, 0, DateTimeKind.Utc);
+            string dateUtcString = utcMidnight.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+
+            // Parametreler
+            string storeCode = "1";
+            int salesType = 0;
+            bool excludeCancelledLines = true;
+
+            // Base URL
+            var baseUrl = CFG.NCRBASEURL;
+            var salesEndpoint = "api/Reports/sales";
+
+            // Proxy kapalı
+            ServicePointManager.SecurityProtocol =
+                SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+            var handler = new HttpClientHandler { UseProxy = false, Proxy = null };
+
+            // Token
+            AuthApi.SetBaseUrl(baseUrl);
+            string token = await AuthApi.GetTokenAsync(
+                storeId: 0, posId: 0, cashierId: 0,
+                username: CFG.NCRUSERNAME,
+                password: CFG.NCRPASSWORD,
+                timeout: TimeSpan.FromSeconds(30)
+            ).ConfigureAwait(false);
+
+            // Timeout artırıldı (yoğun günler için)
+            var http = new HttpClient(handler) { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(180) };
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            http.DefaultRequestHeaders.Accept.Clear();
+            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            // Birden fazla posCode için dön
+            string[] posCodes = { "1" };
+            var failedPosCodes = new List<string>();
+
+            foreach (var posCode in posCodes)
+            {
+                POS_GLOBAL = posCode;
+                var bodyObj = new
+                {
+                    date = dateUtcString,
+                    excludeCancelledLines,
+                    storeCode,
+                    salesType,
+                    posCode
+                };
+                var json = Newtonsoft.Json.JsonConvert.SerializeObject(bodyObj);
+                var fullUrl = baseUrl.TrimEnd('/') + "/" + salesEndpoint;
+                diag.Endpoint = fullUrl;
+                diag.RequestBody = json;
+
+                HELPER.LOGYAZ($"NCR API İSTEK - URL: {fullUrl}\nBody: {json}", null);
+
+                // Retry mekanizması (3 deneme)
+                int maxRetries = 3;
+                bool success = false;
+                string lastError = "";
+
+                for (int retry = 0; retry < maxRetries && !success; retry++)
+                {
+                    try
+                    {
+                        if (retry > 0)
+                        {
+                            HELPER.LOGYAZ($"NCR PosCode {posCode} için {retry + 1}. deneme yapılıyor...", null);
+                            await Task.Delay(2000 * retry, ct).ConfigureAwait(false);
+                        }
+
+                        var content = new StringContent(json, Encoding.UTF8, "application/json");
+                        var resp = await http.PostAsync(salesEndpoint, content, ct).ConfigureAwait(false);
+                        var respText = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                        // API yanıtını logla (ilk 1000 karakter)
+                        var respSnippet = respText.Length > 1000 ? respText.Substring(0, 1000) + "..." : respText;
+                        HELPER.LOGYAZ($"NCR API YANIT - HTTP {(int)resp.StatusCode}, Body: {respSnippet}", null);
+
+                        if (!resp.IsSuccessStatusCode)
+                        {
+                            lastError = $"HTTP {(int)resp.StatusCode}: {resp.ReasonPhrase}";
+                            HELPER.LOGYAZ($"NCR API HATASI - PosCode: {posCode}, Deneme: {retry + 1}, Hata: {lastError}", null);
+                            continue;
+                        }
+
+                        var root = JToken.Parse(respText);
+                        if (root is JArray arrRoot)
+                        {
+                            allResults.AddRange(arrRoot.ToObject<List<BmsMarkeRGeniusIntegrationLibrary.HELPER.Data>>());
+                            success = true;
+                            continue;
+                        }
+                        if (root is JObject obj)
+                        {
+                            var node =
+                                  obj["datas"] ?? obj["Datas"]
+                               ?? obj["data"] ?? obj["Data"]
+                               ?? obj.SelectToken("result.datas") ?? obj.SelectToken("result.data")
+                               ?? obj.SelectToken("payload.datas") ?? obj.SelectToken("payload.data")
+                               ?? obj.SelectToken("response.datas") ?? obj.SelectToken("response.data")
+                               ?? obj.SelectToken("Result.Datas") ?? obj.SelectToken("Result.Data");
+
+                            if (node is JArray arr)
+                            {
+                                allResults.AddRange(arr.ToObject<List<BmsMarkeRGeniusIntegrationLibrary.HELPER.Data>>());
+                                success = true;
+                            }
+                            else
+                            {
+                                lastError = "API yanıtında 'datas' veya 'data' bulunamadı";
+                                HELPER.LOGYAZ($"NCR API UYARI - PosCode: {posCode}, {lastError}, Keys: {string.Join(",", obj.Properties().Select(p => p.Name))}", null);
+                            }
+                        }
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        lastError = "Timeout - API yanıt vermedi";
+                        HELPER.LOGYAZ($"NCR API TIMEOUT - PosCode: {posCode}, Deneme: {retry + 1}", null);
+                    }
+                    catch (HttpRequestException hex)
+                    {
+                        lastError = hex.Message;
+                        HELPER.LOGYAZ($"NCR API BAĞLANTI HATASI - PosCode: {posCode}, Deneme: {retry + 1}, Hata: {hex.Message}", null);
+                    }
+                    catch (Exception ex)
+                    {
+                        lastError = ex.Message;
+                        HELPER.LOGYAZ($"NCR API GENEL HATA - PosCode: {posCode}, Deneme: {retry + 1}, Hata: {ex.Message}", null);
+                    }
+                }
+
+                if (!success)
+                {
+                    failedPosCodes.Add($"{posCode} ({lastError})");
+                }
+            }
+
+            // Başarısız kasa varsa uyarı göster
+            if (failedPosCodes.Count > 0)
+            {
+                var warningMsg = $"NCR UYARI: Aşağıdaki kasalardan veri alınamadı:\n{string.Join("\n", failedPosCodes)}\n\nDevam etmek istiyor musunuz?";
+                HELPER.LOGYAZ(warningMsg, null);
+                var result = MessageBox.Show(warningMsg, "NCR API Veri Alma Hatası", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (result == DialogResult.No)
                 {
                     throw new Exception("Kullanıcı tarafından iptal edildi - Eksik kasa verileri");
@@ -700,9 +881,15 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                     var price = lineTotal;
                     var discount = 0m; // İndirim zaten TotalPrice'a yansımış, tekrar çıkarmıyoruz
 
+                    var itemCode = string.IsNullOrWhiteSpace(l.productCode) ? l.barcodeNo : l.productCode;
+                    if (string.IsNullOrWhiteSpace(itemCode))
+                    {
+                        HELPER.LOGYAZ($"API Boş Kod - productCode: [{l.productCode}], barcodeNo: [{l.barcodeNo}], productName: [{l.productName}], TotalPrice: {l.TotalPrice}, amount: {l.amount}", null);
+                    }
+
                     details.Add(new Bms_Fiche_Detail
                     {
-                        ITEMCODE = l.productCode,
+                        ITEMCODE = itemCode,
                         ITEMUNIT = string.IsNullOrWhiteSpace(l.productUnit) ? "ADET" : l.productUnit,
                         QUANTITY = l.amount,
                         PRICE = price,
@@ -774,7 +961,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                 var end = DateTime.Parse(sqlFormattedDateEnd, CultureInfo.InvariantCulture);
 
                 HELPER.LOGYAZ($"[SalesNCR] API'den veri çekiliyor...", null);
-                var all = PullSalesFromApi();
+                var all = PullSalesFromApiNCR();
                 HELPER.LOGYAZ($"[SalesNCR] API'den toplam {all?.Count ?? 0} kayıt alındı", null);
 
                 var filtered = all
@@ -821,7 +1008,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                 var end = DateTime.Parse(sqlFormattedDateEnd, CultureInfo.InvariantCulture);
 
                 HELPER.LOGYAZ($"[Sales_WithCustomerNCR] API'den veri çekiliyor...", null);
-                var all = PullSalesFromApi();
+                var all = PullSalesFromApiNCR();
                 HELPER.LOGYAZ($"[Sales_WithCustomerNCR] API'den toplam {all?.Count ?? 0} kayıt alındı", null);
 
                 var filtered = all
@@ -865,7 +1052,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                 var start = DateTime.Parse(sqlFormattedDateStart, CultureInfo.InvariantCulture);
                 var end = DateTime.Parse(sqlFormattedDateEnd, CultureInfo.InvariantCulture);
 
-                var all = PullSalesFromApi();
+                var all = PullSalesFromApiNCR();
                 var filtered = all
                       //  .Where(s => s.date >= start && s.date <= end)
                       //  .Where(s => ResolveLogoBranch(s.storeCode) == branch)
@@ -1216,173 +1403,215 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
 
         private void Sales(List<Bms_Errors> errorList, string branch, string sqlFormattedDateStart, string sqlFormattedDateEnd)
         {
-            string ipFromBranch = HELPER.SqlSelectLogo($@"SELECT TOP 1 Ip FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping WHERE LogoBranch = {branch}").Rows[0][0].ToString();
-            string sqlQuery = File.ReadAllText(QueryFile_Sales);
-            //Fix for ip
-            sqlQuery = sqlQuery.Replace(CFG.OTHERSERVER, ipFromBranch);
-            //Fix for firmnr
-            sqlQuery = sqlQuery.Replace("_124_", "_" + CFG.FIRMNR + "_");
-            //Fix for date1
-            sqlQuery = sqlQuery.Replace("@DATE1", "'" + sqlFormattedDateStart + "'");
-            //Fix for date2
-            sqlQuery = sqlQuery.Replace("@DATE2", "'" + sqlFormattedDateEnd + "'");
-            //add branch to query
-            sqlQuery = sqlQuery + $@" AND FK_STORE = (SELECT top 1 MM.PosBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where LogoBranch={branch}) ";
-            //Fix for distinct
-            string sqlQueryHeader = Regex.Replace(sqlQuery, @"\/\*REPLACE BEGIN FOR DISTINCT\*\/.*?\/\*REPLACE END FOR DISTINCT\*\/", $" DISTINCT DATE_=G3B.TDATE,BRANCH=(SELECT MM.LogoBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where PosBranch=FK_STORE),POS=FK_POS,FTYPE ", RegexOptions.Singleline);
-            /*string sqlQueryHeader = $@"SELECT DISTINCT DATE_,BRANCH,POS,FTYPE FROM {TABLENAME_Sales}('{sqlFormattedDateStart}','{sqlFormattedDateEnd}') WHERE BRANCH = {branch}";*/
-            List<Bms_Fiche_Header> fhl = HELPER.DataTableToList<Bms_Fiche_Header>(HELPER.SqlSelectLogo(sqlQueryHeader));
-            foreach (var item in fhl)
-            {
-                double percantage = (double)fhl.IndexOf(item) / (double)fhl.Count;
-                SplashScreenManager.Default.SetWaitFormDescription("(1/3)Kasa Satışlar(İşyeri " + branch.ToString() + "). " + (percantage * 100).ToString("0.00") + "%");
-                string result = "";
-                string sqlQueryDetail = sqlQuery + $@" AND FK_POS = {item.POS} AND FTYPE = '{item.FTYPE}' and G3B.TDATE = CAST('{item.DATE_.ToString("yyyyMMdd")}' AS DATE) ";
+            try {
+                var ipResult = HELPER.SqlSelectLogo($@"SELECT TOP 1 Ip FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping WHERE LogoBranch = {branch}");
+                if (ipResult == null || ipResult.Rows.Count == 0)
+                {
+                    MessageBox.Show($"Hata: Sales metodunda LogoBranch={branch} için Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping tablosunda kayıt bulunamadı.\n\nLütfen ilgili şube eşleştirmesini kontrol edin.", "Şube Eşleştirme Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                string ipFromBranch = ipResult.Rows[0][0].ToString();
+                string sqlQuery = File.ReadAllText(QueryFile_Sales);
+                //Fix for ip
+                sqlQuery = sqlQuery.Replace(CFG.OTHERSERVER, ipFromBranch);
+                //Fix for firmnr
+                sqlQuery = sqlQuery.Replace("_124_", "_" + CFG.FIRMNR + "_");
+                //Fix for date1
+                sqlQuery = sqlQuery.Replace("@DATE1", "'" + sqlFormattedDateStart + "'");
+                //Fix for date2
+                sqlQuery = sqlQuery.Replace("@DATE2", "'" + sqlFormattedDateEnd + "'");
+                //add branch to query
+                sqlQuery = sqlQuery + $@" AND FK_STORE = (SELECT top 1 MM.PosBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where LogoBranch={branch}) ";
+                //Fix for distinct
+                string sqlQueryHeader = Regex.Replace(sqlQuery, @"\/\*REPLACE BEGIN FOR DISTINCT\*\/.*?\/\*REPLACE END FOR DISTINCT\*\/", $" DISTINCT DATE_=G3B.TDATE,BRANCH=(SELECT MM.LogoBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where PosBranch=FK_STORE),POS=FK_POS,FTYPE ", RegexOptions.Singleline);
+                /*string sqlQueryHeader = $@"SELECT DISTINCT DATE_,BRANCH,POS,FTYPE FROM {TABLENAME_Sales}('{sqlFormattedDateStart}','{sqlFormattedDateEnd}') WHERE BRANCH = {branch}";*/
+                List<Bms_Fiche_Header> fhl = HELPER.DataTableToList<Bms_Fiche_Header>(HELPER.SqlSelectLogo(sqlQueryHeader));
+                foreach (var item in fhl)
+                {
+                    double percantage = (double)fhl.IndexOf(item) / (double)fhl.Count;
+                    SplashScreenManager.Default.SetWaitFormDescription("(1/3)Kasa Satışlar(İşyeri " + branch.ToString() + "). " + (percantage * 100).ToString("0.00") + "%");
+                    string result = "";
+                    string sqlQueryDetail = sqlQuery + $@" AND FK_POS = {item.POS} AND FTYPE = '{item.FTYPE}' and G3B.TDATE = CAST('{item.DATE_.ToString("yyyyMMdd")}' AS DATE) ";
 
-                //string sqlQueryDetail = $@"SELECT * FROM {TABLENAME_Sales} ('{sqlFormattedDateStartForDetail}','{sqlFormattedDateEndForDetail}') WHERE BRANCH = {branch} AND POS = {item.POS} AND FTYPE = '{item.FTYPE}'";
-                List<Bms_Fiche_Detail> fdl = HELPER.DataTableToList<Bms_Fiche_Detail>(HELPER.SqlSelectLogo(sqlQueryDetail));
-                //INSERT WITH LOGO
-                //string BRANCH = "0";
-                //try { BRANCH = le_Branch.EditValue.ToString(); } catch { }
-                if (item.FTYPE == "SATIS")
-                {
-                    //SATIS FATURASI
-                    result = HELPER.InsertInvoice(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR);
-                }
-                else if (item.FTYPE == "IADE")
-                {
-                    //IADE FATURASI
-                    result = HELPER.InsertReturnInvoice(le_ReturnClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR,"BMS");
-                }
-                if (result != "ok")
-                {
-                    errorList.Add(new Bms_Errors()
+                    //string sqlQueryDetail = $@"SELECT * FROM {TABLENAME_Sales} ('{sqlFormattedDateStartForDetail}','{sqlFormattedDateEndForDetail}') WHERE BRANCH = {branch} AND POS = {item.POS} AND FTYPE = '{item.FTYPE}'";
+                    List<Bms_Fiche_Detail> fdl = HELPER.DataTableToList<Bms_Fiche_Detail>(HELPER.SqlSelectLogo(sqlQueryDetail));
+                    //INSERT WITH LOGO
+                    //string BRANCH = "0";
+                    //try { BRANCH = le_Branch.EditValue.ToString(); } catch { }
+                    if (item.FTYPE == "SATIS")
                     {
-                        BRANCH = item.BRANCH,
-                        POS = item.POS,
-                        FTYPE = item.FTYPE,
-                        DATE_ = item.DATE_,
-                        ERRORMESSAGE = result
-                    });
+                        //SATIS FATURASI
+                        result = HELPER.InsertInvoice(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR);
+                    }
+                    else if (item.FTYPE == "IADE")
+                    {
+                        //IADE FATURASI
+                        result = HELPER.InsertReturnInvoice(le_ReturnClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR, "BMS");
+                    }
+                    if (result != "ok")
+                    {
+                        errorList.Add(new Bms_Errors()
+                        {
+                            BRANCH = item.BRANCH,
+                            POS = item.POS,
+                            FTYPE = item.FTYPE,
+                            DATE_ = item.DATE_,
+                            ERRORMESSAGE = result
+                        });
+                    }
+                    GC.Collect();
                 }
-                GC.Collect();
+            }
+            catch (Exception ex)
+            {
+                HELPER.LOGYAZ(ex.ToString(), null);
             }
         }
         private void Payments(List<Bms_Errors> errorList, string branch, string sqlFormattedDateStart, string sqlFormattedDateEnd)
         {
-            string ipFromBranch = HELPER.SqlSelectLogo($@"SELECT TOP 1 Ip FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping WHERE LogoBranch = {branch}").Rows[0][0].ToString();
-            string sqlQuery = File.ReadAllText(QueryFile_Payments);
-            //Fix for ip
-            sqlQuery = sqlQuery.Replace(CFG.OTHERSERVER, ipFromBranch);
-            //Fix for firmnr
-            sqlQuery = sqlQuery.Replace("_124_", "_" + CFG.FIRMNR + "_");
-            //Fix for date1
-            sqlQuery = sqlQuery.Replace("@DATE1", "'" + sqlFormattedDateStart + "'");
-            //Fix for date2
-            sqlQuery = sqlQuery.Replace("@DATE2", "'" + sqlFormattedDateEnd + "'");
-            //add branch to query
-            sqlQuery = sqlQuery.Replace(" MM.Branch=0", " MM.Branch=" + branch);
-            sqlQuery = sqlQuery.Replace(" MM where LogoBranch=0", " MM where LogoBranch=" + branch);
+            try {
+                var ipResult = HELPER.SqlSelectLogo($@"SELECT TOP 1 Ip FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping WHERE LogoBranch = {branch}");
+                if (ipResult == null || ipResult.Rows.Count == 0)
+                {
+                    MessageBox.Show($"Hata: Payments metodunda LogoBranch={branch} için Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping tablosunda kayıt bulunamadı.\n\nLütfen ilgili şube eşleştirmesini kontrol edin.", "Şube Eşleştirme Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                string ipFromBranch = ipResult.Rows[0][0].ToString();
+                string sqlQuery = File.ReadAllText(QueryFile_Payments);
+                //Fix for ip
+                sqlQuery = sqlQuery.Replace(CFG.OTHERSERVER, ipFromBranch);
+                //Fix for firmnr
+                sqlQuery = sqlQuery.Replace("_124_", "_" + CFG.FIRMNR + "_");
+                //Fix for date1
+                sqlQuery = sqlQuery.Replace("@DATE1", "'" + sqlFormattedDateStart + "'");
+                //Fix for date2
+                sqlQuery = sqlQuery.Replace("@DATE2", "'" + sqlFormattedDateEnd + "'");
+                //add branch to query
+                sqlQuery = sqlQuery.Replace(" MM.Branch=0", " MM.Branch=" + branch);
+                sqlQuery = sqlQuery.Replace(" MM where LogoBranch=0", " MM where LogoBranch=" + branch);
 
-            List<Bms_Fiche_Payment> fhl = HELPER.DataTableToList<Bms_Fiche_Payment>(HELPER.SqlSelectLogo(sqlQuery));
-            foreach (var item in fhl)
-            {
-                double percantage = (double)fhl.IndexOf(item) / (double)fhl.Count;
-                SplashScreenManager.Default.SetWaitFormDescription("(3/3)Tahsilarlar(İşyeri " + branch.ToString() + "). " + (percantage * 100).ToString("0.00") + "%");
-                if (string.IsNullOrEmpty(item.DOCUMENT_NO) && string.IsNullOrEmpty(item.CUSTOMER_CODE))
+                List<Bms_Fiche_Payment> fhl = HELPER.DataTableToList<Bms_Fiche_Payment>(HELPER.SqlSelectLogo(sqlQuery));
+                foreach (var item in fhl)
                 {
-                    item.CUSTOMER_CODE = le_InvoiceClient.EditValue.ToString();
-                    item.CUSTOMER_NAME = HELPER.SqlSelectLogo($"SELECT DEFINITION_ FROM LG_{CFG.FIRMNR}_CLCARD WHERE CODE='{item.CUSTOMER_CODE}'").Rows[0][0].ToString();
-                }
-                string result = "";
-                if (string.IsNullOrEmpty(item.LOGO_FICHE_TYPE))
-                {
-                    result = "LOGO_FICHE_TYPE is null or empty";
-                }
-                else if (item.LOGO_FICHE_TYPE == "Veresiye")
-                {
-                    continue;
-                }
-                else if (item.LOGO_FICHE_TYPE == "Cek Girisi")
-                {
-                    result = HELPER.InsertCheque(branch, item, CFG.FIRMNR);
-                }
-                else if (item.LOGO_FICHE_TYPE == "CH Kredi Karti" || item.LOGO_FICHE_TYPE == "CH Kredi Karti Iade" || item.LOGO_FICHE_TYPE == "CH Borc" || item.LOGO_FICHE_TYPE == "CH Alacak")
-                {
-                    result = HELPER.InsertCHFiche(branch, item, CFG.FIRMNR);
-                }
-                else if (item.LOGO_FICHE_TYPE == "Kasa Tahsilat" || item.LOGO_FICHE_TYPE == "Kasa Odeme")
-                {
-                    result = HELPER.InsertKsFiche(branch, item, CFG.FIRMNR);
-                }
-                if (result != "ok")
-                {
-                    errorList.Add(new Bms_Errors()
+                    double percantage = (double)fhl.IndexOf(item) / (double)fhl.Count;
+                    SplashScreenManager.Default.SetWaitFormDescription("(3/3)Tahsilarlar(İşyeri " + branch.ToString() + "). " + (percantage * 100).ToString("0.00") + "%");
+                    if (string.IsNullOrEmpty(item.DOCUMENT_NO) && string.IsNullOrEmpty(item.CUSTOMER_CODE))
                     {
-                        BRANCH = item.LOGO_BRANCH,
-                        POS = item.POS,
-                        FTYPE = "Payment:" + item.LOGO_FICHE_TYPE,
-                        DATE_ = item.DATE_,
-                        ERRORMESSAGE = result
-                    });
+                        item.CUSTOMER_CODE = le_InvoiceClient.EditValue.ToString();
+                        var customerResult = HELPER.SqlSelectLogo($"SELECT DEFINITION_ FROM LG_{CFG.FIRMNR}_CLCARD WHERE CODE='{item.CUSTOMER_CODE}'");
+                        if (customerResult == null || customerResult.Rows.Count == 0)
+                        {
+                            MessageBox.Show($"Hata: Payments metodunda Cari Kod='{item.CUSTOMER_CODE}' için LG_{CFG.FIRMNR}_CLCARD tablosunda kayıt bulunamadı.\n\nLütfen cari kartı kontrol edin.", "Cari Kart Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            continue;
+                        }
+                        item.CUSTOMER_NAME = customerResult.Rows[0][0].ToString();
+                    }
+                    string result = "";
+                    if (string.IsNullOrEmpty(item.LOGO_FICHE_TYPE))
+                    {
+                        result = "LOGO_FICHE_TYPE is null or empty";
+                    }
+                    else if (item.LOGO_FICHE_TYPE == "Veresiye")
+                    {
+                        continue;
+                    }
+                    else if (item.LOGO_FICHE_TYPE == "Cek Girisi")
+                    {
+                        result = HELPER.InsertCheque(branch, item, CFG.FIRMNR);
+                    }
+                    else if (item.LOGO_FICHE_TYPE == "CH Kredi Karti" || item.LOGO_FICHE_TYPE == "CH Kredi Karti Iade" || item.LOGO_FICHE_TYPE == "CH Borc" || item.LOGO_FICHE_TYPE == "CH Alacak")
+                    {
+                        result = HELPER.InsertCHFiche(branch, item, CFG.FIRMNR);
+                    }
+                    else if (item.LOGO_FICHE_TYPE == "Kasa Tahsilat" || item.LOGO_FICHE_TYPE == "Kasa Odeme")
+                    {
+                        result = HELPER.InsertKsFiche(branch, item, CFG.FIRMNR);
+                    }
+                    if (result != "ok")
+                    {
+                        errorList.Add(new Bms_Errors()
+                        {
+                            BRANCH = item.LOGO_BRANCH,
+                            POS = item.POS,
+                            FTYPE = "Payment:" + item.LOGO_FICHE_TYPE,
+                            DATE_ = item.DATE_,
+                            ERRORMESSAGE = result
+                        });
+                    }
+                    GC.Collect();
                 }
-                GC.Collect();
+            }
+            catch (Exception ex)
+            {
+                HELPER.LOGYAZ(ex.ToString(), null);
             }
 
         }
         private void Sales_WithCustomer(List<Bms_Errors> errorList, string branch, string sqlFormattedDateStart, string sqlFormattedDateEnd)
         {
-            string ipFromBranch = HELPER.SqlSelectLogo($@"SELECT TOP 1 Ip FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping WHERE LogoBranch = {branch}").Rows[0][0].ToString();
-            string sqlQuery = File.ReadAllText(QueryFile_Sales_WithCustomer);
-            //Fix for ip
-            sqlQuery = sqlQuery.Replace(CFG.OTHERSERVER, ipFromBranch);
-            //Fix for firmnr
-            sqlQuery = sqlQuery.Replace("_124_", "_" + CFG.FIRMNR + "_");
-            //Fix for date1
-            sqlQuery = sqlQuery.Replace("@DATE1", "'" + sqlFormattedDateStart + "'");
-            //Fix for date2
-            sqlQuery = sqlQuery.Replace("@DATE2", "'" + sqlFormattedDateEnd + "'");
-            //add branch to query
-            sqlQuery = sqlQuery + $@" AND FK_STORE = (SELECT top 1 MM.PosBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where LogoBranch={branch}) ";
-            //Fix for distinct
-            string sqlQueryHeader = Regex.Replace(sqlQuery, @"\/\*REPLACE BEGIN FOR DISTINCT\*\/.*?\/\*REPLACE END FOR DISTINCT\*\/", $" DISTINCT FICHE_ID=CAST(FICHE_ID AS VARCHAR),DATE_=G3B.TDATE,BRANCH=(SELECT MM.LogoBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where PosBranch=FK_STORE),POS=FK_POS,FTYPE,DOCUMENT_NO,CUSTOMER_CODE=CASE WHEN CUSTOMER_CODE='' THEN (SELECT TOP 1 DD.Value FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Default DD WHERE DD.Description='YAZARKARA FISLI CARI BOS LOGO CARISI') ELSE CUSTOMER_CODE END,CUSTOMER_NAME ", RegexOptions.Singleline);
-            //string sqlQueryHeader = $@"SELECT DISTINCT FICHE_ID,DATE_,BRANCH,POS,FTYPE,CUSTOMER_CODE,CUSTOMER_NAME FROM {TABLENAME_Sales_WithCustomer}('{sqlFormattedDateStart}','{sqlFormattedDateEnd}') WHERE BRANCH = {branch}";
-            List<Bms_Fiche_Header> fhl = HELPER.DataTableToList<Bms_Fiche_Header>(HELPER.SqlSelectLogo(sqlQueryHeader));
-            HELPER.LOGYAZ(sqlQueryHeader, null);
-            foreach (var item in fhl)
-            {
-                double percantage = (double)fhl.IndexOf(item) / (double)fhl.Count;
-                SplashScreenManager.Default.SetWaitFormDescription("(2/3)Kasa Satışlar-Carili(İşyeri " + branch.ToString() + "). " + (percantage * 100).ToString("0.00") + "%");
-                string result = "";
-                string sqlQueryDetail = sqlQuery + $@" AND FK_POS = {item.POS} AND FTYPE = '{item.FTYPE}' and CAST(FICHE_ID AS VARCHAR) = '{item.FICHE_ID}' AND (CASE WHEN CUSTOMER_CODE='' THEN (SELECT TOP 1 DD.Value FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Default DD WHERE DD.Description='YAZARKARA FISLI CARI BOS LOGO CARISI') ELSE CUSTOMER_CODE END) = '{item.CUSTOMER_CODE}' AND DOCUMENT_NO = '{item.DOCUMENT_NO}' AND CUSTOMER_NAME = '{item.CUSTOMER_NAME}' AND G3B.TDATE = CAST('{item.DATE_.ToString("yyyyMMdd")}' AS DATE) ";
+            try {
+                var ipResult = HELPER.SqlSelectLogo($@"SELECT TOP 1 Ip FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping WHERE LogoBranch = {branch}");
+                if (ipResult == null || ipResult.Rows.Count == 0)
+                {
+                    MessageBox.Show($"Hata: Sales_WithCustomer metodunda LogoBranch={branch} için Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping tablosunda kayıt bulunamadı.\n\nLütfen ilgili şube eşleştirmesini kontrol edin.", "Şube Eşleştirme Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+                string ipFromBranch = ipResult.Rows[0][0].ToString();
+                string sqlQuery = File.ReadAllText(QueryFile_Sales_WithCustomer);
+                //Fix for ip
+                sqlQuery = sqlQuery.Replace(CFG.OTHERSERVER, ipFromBranch);
+                //Fix for firmnr
+                sqlQuery = sqlQuery.Replace("_124_", "_" + CFG.FIRMNR + "_");
+                //Fix for date1
+                sqlQuery = sqlQuery.Replace("@DATE1", "'" + sqlFormattedDateStart + "'");
+                //Fix for date2
+                sqlQuery = sqlQuery.Replace("@DATE2", "'" + sqlFormattedDateEnd + "'");
+                //add branch to query
+                sqlQuery = sqlQuery + $@" AND FK_STORE = (SELECT top 1 MM.PosBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where LogoBranch={branch}) ";
+                //Fix for distinct
+                string sqlQueryHeader = Regex.Replace(sqlQuery, @"\/\*REPLACE BEGIN FOR DISTINCT\*\/.*?\/\*REPLACE END FOR DISTINCT\*\/", $" DISTINCT FICHE_ID=CAST(FICHE_ID AS VARCHAR),DATE_=G3B.TDATE,BRANCH=(SELECT MM.LogoBranch FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Mapping MM where PosBranch=FK_STORE),POS=FK_POS,FTYPE,DOCUMENT_NO,CUSTOMER_CODE=CASE WHEN CUSTOMER_CODE='' THEN (SELECT TOP 1 DD.Value FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Default DD WHERE DD.Description='YAZARKARA FISLI CARI BOS LOGO CARISI') ELSE CUSTOMER_CODE END,CUSTOMER_NAME ", RegexOptions.Singleline);
+                //string sqlQueryHeader = $@"SELECT DISTINCT FICHE_ID,DATE_,BRANCH,POS,FTYPE,CUSTOMER_CODE,CUSTOMER_NAME FROM {TABLENAME_Sales_WithCustomer}('{sqlFormattedDateStart}','{sqlFormattedDateEnd}') WHERE BRANCH = {branch}";
+                List<Bms_Fiche_Header> fhl = HELPER.DataTableToList<Bms_Fiche_Header>(HELPER.SqlSelectLogo(sqlQueryHeader));
+                HELPER.LOGYAZ(sqlQueryHeader, null);
+                foreach (var item in fhl)
+                {
+                    double percantage = (double)fhl.IndexOf(item) / (double)fhl.Count;
+                    SplashScreenManager.Default.SetWaitFormDescription("(2/3)Kasa Satışlar-Carili(İşyeri " + branch.ToString() + "). " + (percantage * 100).ToString("0.00") + "%");
+                    string result = "";
+                    string sqlQueryDetail = sqlQuery + $@" AND FK_POS = {item.POS} AND FTYPE = '{item.FTYPE}' and CAST(FICHE_ID AS VARCHAR) = '{item.FICHE_ID}' AND (CASE WHEN CUSTOMER_CODE='' THEN (SELECT TOP 1 DD.Value FROM Bms_{CFG.FIRMNR}_MarkeRGeniusIntegration_Default DD WHERE DD.Description='YAZARKARA FISLI CARI BOS LOGO CARISI') ELSE CUSTOMER_CODE END) = '{item.CUSTOMER_CODE}' AND DOCUMENT_NO = '{item.DOCUMENT_NO}' AND CUSTOMER_NAME = '{item.CUSTOMER_NAME}' AND G3B.TDATE = CAST('{item.DATE_.ToString("yyyyMMdd")}' AS DATE) ";
 
-                //string sqlQueryDetail = $@"SELECT * FROM {TABLENAME_Sales_WithCustomer} ('{sqlFormattedDateStartForDetail}','{sqlFormattedDateEndForDetail}') WHERE BRANCH = {branch} AND POS = {item.POS} AND FTYPE = '{item.FTYPE}' AND FICHE_ID='{item.FICHE_ID}' AND CUSTOMER_CODE = '{item.CUSTOMER_CODE}' AND CUSTOMER_NAME = '{item.CUSTOMER_NAME}'";
-                List<Bms_Fiche_Detail> fdl = HELPER.DataTableToList<Bms_Fiche_Detail>(HELPER.SqlSelectLogo(sqlQueryDetail));
-                //INSERT WITH LOGO
-                //string BRANCH = "0";
-                //try { BRANCH = le_Branch.EditValue.ToString(); } catch { }
-                if (item.FTYPE == "SATIS")
-                {
-                    //SATIS FATURASI
-                    result = HELPER.InsertInvoice(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR);
-                }
-                else if (item.FTYPE == "IADE")
-                {
-                    //IADE FATURASI
-                    result = HELPER.InsertReturnInvoice(le_ReturnClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR,"BMS");
-                }
-                if (result != "ok")
-                {
-                    errorList.Add(new Bms_Errors()
+                    //string sqlQueryDetail = $@"SELECT * FROM {TABLENAME_Sales_WithCustomer} ('{sqlFormattedDateStartForDetail}','{sqlFormattedDateEndForDetail}') WHERE BRANCH = {branch} AND POS = {item.POS} AND FTYPE = '{item.FTYPE}' AND FICHE_ID='{item.FICHE_ID}' AND CUSTOMER_CODE = '{item.CUSTOMER_CODE}' AND CUSTOMER_NAME = '{item.CUSTOMER_NAME}'";
+                    List<Bms_Fiche_Detail> fdl = HELPER.DataTableToList<Bms_Fiche_Detail>(HELPER.SqlSelectLogo(sqlQueryDetail));
+                    //INSERT WITH LOGO
+                    //string BRANCH = "0";
+                    //try { BRANCH = le_Branch.EditValue.ToString(); } catch { }
+                    if (item.FTYPE == "SATIS")
                     {
-                        BRANCH = item.BRANCH,
-                        POS = item.POS,
-                        FTYPE = item.FTYPE,
-                        DATE_ = item.DATE_,
-                        ERRORMESSAGE = result
-                    });
+                        //SATIS FATURASI
+                        result = HELPER.InsertInvoice(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR);
+                    }
+                    else if (item.FTYPE == "IADE")
+                    {
+                        //IADE FATURASI
+                        result = HELPER.InsertReturnInvoice(le_ReturnClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR, "BMS");
+                    }
+                    if (result != "ok")
+                    {
+                        errorList.Add(new Bms_Errors()
+                        {
+                            BRANCH = item.BRANCH,
+                            POS = item.POS,
+                            FTYPE = item.FTYPE,
+                            DATE_ = item.DATE_,
+                            ERRORMESSAGE = result
+                        });
+                    }
+                    GC.Collect();
                 }
-                GC.Collect();
+            }
+            catch (Exception ex)
+            {
+                HELPER.LOGYAZ(ex.ToString(), null);
             }
         }
 
@@ -1450,7 +1679,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
             public LogoInvoiceHandler(ILogger<LogoInvoiceHandler> log, IOptions<SalesApiOptions> opt)
             {
                 _log = log;
-                _firmNr = /* CFG.FIRMNR */ "125";
+                _firmNr = /* CFG.FIRMNR */ "126";
                 _defaultArpForCash = /* config/DB */ "";
             }
 
@@ -1482,9 +1711,15 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                         var unitPrice = l.amount > 0 ? Convert.ToDecimal(l.amount)
                                                      : (qty != 0 ? lineTotal / qty : 0m);
 
+                        var itemCode = string.IsNullOrWhiteSpace(l.productCode) ? l.barcodeNo : l.productCode;
+                        if (string.IsNullOrWhiteSpace(itemCode))
+                        {
+                            HELPER.LOGYAZ($"API Boş Kod - productCode: [{l.productCode}], barcodeNo: [{l.barcodeNo}], productName: [{l.productName}], TotalPrice: {l.TotalPrice}, amount: {l.amount}", null);
+                        }
+
                         details.Add(new Bms_Fiche_Detail
                         {
-                            ITEMCODE = l.productCode,
+                            ITEMCODE = itemCode,
                             ITEMUNIT = string.IsNullOrWhiteSpace(l.productUnit) ? "ADET" : l.productUnit,
                             QUANTITY = (double)qty,
                             PRICE = unitPrice,
@@ -1522,7 +1757,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
             {
                 try
                 {
-                    var sql = $"SELECT TOP 1 PosBranch FROM Bms_125_MarkeRGeniusIntegration_Mapping WHERE StoreCode='{storeCode}'";
+                    var sql = $"SELECT TOP 1 PosBranch FROM Bms_126_MarkeRGeniusIntegration_Mapping WHERE StoreCode='{storeCode}'";
                     var dt = HELPER.SqlSelectLogo(sql);
                     if (dt.Rows.Count > 0)
                         return Convert.ToString(dt.Rows[0][0]);
@@ -1602,7 +1837,10 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                 foreach (var line in _DETAILS)
                 {
                     if (string.IsNullOrEmpty(line.ITEMCODE))
-                        throw new Exception("Ürün kodu bulunamadı tarih:" + _BASLIK.DATE_.ToString() + " pos:" + _BASLIK.POS.ToString());
+                    {
+                        HELPER.LOGYAZ($"Boş ITEMCODE atlandı - Tarih: {_BASLIK.DATE_:yyyy-MM-dd}, POS: {_BASLIK.POS}, Ürün: {line.ITEMNAME}, Tutar: {line.LINETOTAL}, Miktar: {line.QUANTITY}", null);
+                        continue;
+                    }
                     transactions_lines.AppendLine();
                     double VatRate = 0;
                     try
@@ -1831,15 +2069,15 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                         string result;
                         if (ficheType.Equals("Cek Girisi", StringComparison.OrdinalIgnoreCase))
                         {
-                            result = HELPER.InsertCheque(branch, dto, "125"); // cheque in
+                            result = HELPER.InsertCheque(branch, dto, "126"); // cheque in
                         }
                         else if (ficheType.StartsWith("Kasa", StringComparison.OrdinalIgnoreCase))
                         {
-                            result = HELPER.InsertKsFiche(branch, dto, "125"); // cash receipt/payment
+                            result = HELPER.InsertKsFiche(branch, dto, "126"); // cash receipt/payment
                         }
                         else
                         {
-                            result = HELPER.InsertCHFiche(branch, dto, "125"); // bank / AR/AP voucher
+                            result = HELPER.InsertCHFiche(branch, dto, "126"); // bank / AR/AP voucher
                         }
 
                         if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
@@ -2080,14 +2318,14 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                     // Öncelik: LogoBranch
                     var dt = HELPER.SqlSelectLogo(
                         $@"SELECT TOP 1 LogoBranch 
-                   FROM Bms_125_MarkeRGeniusIntegration_Mapping 
+                   FROM Bms_126_MarkeRGeniusIntegration_Mapping 
                    WHERE StoreCode='{storeCode}'");
                     if (dt.Rows.Count > 0) return Convert.ToString(dt.Rows[0][0], CultureInfo.InvariantCulture);
 
                     // Alternatif kolon: PosBranch (bazı şemalarda böyle)
                     dt = HELPER.SqlSelectLogo(
                         $@"SELECT TOP 1 PosBranch 
-                   FROM Bms_125_MarkeRGeniusIntegration_Mapping 
+                   FROM Bms_126_MarkeRGeniusIntegration_Mapping 
                    WHERE StoreCode='{storeCode}'");
                     if (dt.Rows.Count > 0) return Convert.ToString(dt.Rows[0][0], CultureInfo.InvariantCulture);
                 }
@@ -2110,8 +2348,8 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
 
                     // Aksi halde, iade/satış durumuna göre default cari
                     var table = (sale != null && (sale.total < 0 || sale.documentType == 2))
-                        ? $"BMS_125_MarkeRGenius_ReturnClient"
-                        : $"BMS_125_MarkeRGenius_InvoiceClient";
+                        ? $"BMS_126_MarkeRGenius_ReturnClient"
+                        : $"BMS_126_MarkeRGenius_InvoiceClient";
 
                     var dt = HELPER.SqlSelectLogo($@"SELECT TOP 1 NR FROM {table} ORDER BY NR");
                     if (dt.Rows.Count > 0) return Convert.ToString(dt.Rows[0][0], CultureInfo.InvariantCulture);
@@ -2144,7 +2382,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
 
                     var dt = HELPER.SqlSelectLogo(
                         $@"SELECT TOP 1 {column} 
-                   FROM Bms_125_MarkeRGeniusIntegration_Mapping 
+                   FROM Bms_126_MarkeRGeniusIntegration_Mapping 
                    WHERE LogoBranch = {branch}");
                     if (dt.Rows.Count > 0) return Convert.ToString(dt.Rows[0][0], CultureInfo.InvariantCulture);
                 }
@@ -2161,7 +2399,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
 
                     var dt = HELPER.SqlSelectLogo(
                         $@"SELECT TOP 1 Value 
-                   FROM Bms_125_MarkeRGeniusIntegration_Default 
+                   FROM Bms_126_MarkeRGeniusIntegration_Default 
                    WHERE Description='{desc}'");
                     if (dt.Rows.Count > 0) return Convert.ToString(dt.Rows[0][0], CultureInfo.InvariantCulture);
                 }
@@ -2275,7 +2513,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
             try
             {
                 SplashScreenManager.Default.SetWaitFormDescription("API'den veri kontrol ediliyor...");
-                var allSalesForCheck = PullSalesFromApi();
+                var allSalesForCheck = PullSalesFromApiNCR();
                 var start = DateTime.Parse(sqlFormattedDateStart, CultureInfo.InvariantCulture);
                 var end = DateTime.Parse(sqlFormattedDateEnd, CultureInfo.InvariantCulture);
 
@@ -2556,14 +2794,15 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
         private async Task<List<SalesProbeRow>> ProbeSalesBetweenSep1To8Async(
             string storeCode, string posCode, int salesType, bool excludeCancelled, CancellationToken ct)
         {
-            var baseUrl = "http://192.168.3.10:9996/";
+            var baseUrl = CFG.NCRBASEURL;
             var salesEndpoint = "api/Reports/sales";
 
             // Reuse one token & one client
+            AuthApi.SetBaseUrl(baseUrl);
             var token = await AuthApi.GetTokenAsync(
                 storeId: 0, posId: 0, cashierId: 0,
-                username: "kasa",
-                password: "81dc9bdb52d04dc20036dbd8313ed055",
+                username: CFG.NCRUSERNAME,
+                password: CFG.NCRPASSWORD,
                 timeout: TimeSpan.FromSeconds(30)
             ).ConfigureAwait(false);
 

@@ -259,11 +259,16 @@ namespace BmsMarkeRGeniusIntegrationLibrary
             String strresult = "";
             try
             {
+                LOGYAZ($"LOGO_LOGIN deneniyor - User: {USERNAME}, FirmNr: {FIRMNR}", null);
                 if (AppUnity != null && AppUnity.Connected)
                     LOGO_LOGOUT();
                 AppUnity = new UnityObjects.UnityApplication();
                 if (!AppUnity.Login(USERNAME, PASSWORD, FIRMNR, 1))
-                    throw new Exception(AppUnity.GetLastErrorString());
+                {
+                    var logoError = AppUnity.GetLastErrorString();
+                    LOGYAZ($"LOGO_LOGIN başarısız - Hata: {(string.IsNullOrEmpty(logoError) ? "Boş hata mesajı" : logoError)}", null);
+                    throw new Exception(string.IsNullOrEmpty(logoError) ? "Logo giriş başarısız (hata mesajı yok)" : logoError);
+                }
 
                 strresult = "";
             }
@@ -452,7 +457,10 @@ namespace BmsMarkeRGeniusIntegrationLibrary
                     foreach (var line in _DETAILS)
                     {
                         if (string.IsNullOrWhiteSpace(Convert.ToString(line.ITEMCODE)))
-                            throw new Exception($"Ürün kodu bulunamadı. Tarih={_BASLIK.DATE_:yyyy-MM-dd}, POS={_BASLIK.POS}");
+                        {
+                            LOGYAZ($"Boş ITEMCODE atlandı - Tarih: {_BASLIK.DATE_:yyyy-MM-dd}, POS: {_BASLIK.POS}, Ürün: {line.ITEMNAME}, Tutar: {line.LINETOTAL}, Miktar: {line.QUANTITY}", null);
+                            continue;
+                        }
 
                         // KDV oranı
                         double vatRate = 0;
@@ -608,7 +616,10 @@ namespace BmsMarkeRGeniusIntegrationLibrary
                 foreach (var line in _DETAILS)
                 {
                     if (string.IsNullOrEmpty(line.ITEMCODE))
-                        throw new Exception("Ürün kodu bulunamadı tarih:" + _BASLIK.DATE_.ToString() + " pos:" + _BASLIK.POS.ToString());
+                    {
+                        LOGYAZ($"Boş ITEMCODE atlandı - Tarih: {_BASLIK.DATE_:yyyy-MM-dd}, POS: {_BASLIK.POS}, Ürün: {line.ITEMNAME}, Tutar: {line.LINETOTAL}, Miktar: {line.QUANTITY}", null);
+                        continue;
+                    }
                     transactions_lines.AppendLine();
                     double VatRate = 0;
                     try { VatRate = double.Parse(HELPER.SqlSelectLogo($"SELECT VAT FROM LG_{FIRMNR}_ITEMS WITH(NOLOCK) WHERE CODE='" + line.ITEMCODE + "'").Rows[0][0].ToString()); }
@@ -727,7 +738,10 @@ namespace BmsMarkeRGeniusIntegrationLibrary
                 foreach (var line in _DETAILS)
                 {
                     if (string.IsNullOrEmpty(line.ITEMCODE))
-                        throw new Exception("Ürün kodu bulunamadı tarih:" + _BASLIK.DATE_.ToString() + " pos:" + _BASLIK.POS.ToString());
+                    {
+                        LOGYAZ($"Boş ITEMCODE atlandı - Tarih: {_BASLIK.DATE_:yyyy-MM-dd}, POS: {_BASLIK.POS}, Ürün: {line.ITEMNAME}, Tutar: {line.LINETOTAL}, Miktar: {line.QUANTITY}", null);
+                        continue;
+                    }
                     transactions_lines.AppendLine();
                     double VatRate = 0;
                     try { VatRate = double.Parse(HELPER.SqlSelectLogo($"SELECT VAT FROM LG_{FIRMNR}_ITEMS WITH(NOLOCK) WHERE CODE='" + line.ITEMCODE + "'").Rows[0][0].ToString()); } catch { }
@@ -1638,7 +1652,18 @@ namespace BmsMarkeRGeniusIntegrationLibrary
         public static string InsertKsFiche(string BRANCH, Bms_Fiche_Payment _PAYMENT, string FIRMNR)
         {
             bool isCustomerExist = false;
-            try { isCustomerExist = Convert.ToBoolean(SqlSelectLogo($"SELECT COUNT(*) FROM LG_{FIRMNR}_CLCARD WHERE CODE='{_PAYMENT.CUSTOMER_CODE}'").Rows[0][0]); } catch { }
+            try
+            {
+                var query = $"SELECT COUNT(*) FROM LG_{FIRMNR}_CLCARD WHERE CODE='{_PAYMENT.CUSTOMER_CODE}'";
+                LOGYAZ($"InsertKsFiche - Sorgu: {query}", null);
+                var result = SqlSelectLogo(query).Rows[0][0];
+                LOGYAZ($"InsertKsFiche - Sonuç: {result}", null);
+                isCustomerExist = Convert.ToInt32(result) > 0;
+            }
+            catch (Exception ex)
+            {
+                LOGYAZ($"InsertKsFiche - Müşteri sorgusu HATA: {ex.Message}", ex);
+            }
             if (!isCustomerExist)
                 _PAYMENT.CUSTOMER_CODE = _PAYMENT.CUSTOMER_CODE.TrimStart('0');
             try
