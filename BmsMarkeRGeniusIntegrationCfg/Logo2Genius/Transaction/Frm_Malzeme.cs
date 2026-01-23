@@ -592,7 +592,7 @@ namespace BmsMarkeRGeniusIntegrationCfg.Logo2Genius.Transaction
 
                     });
                 }
-                // ——— vats ——— (gerekirse burada da tekilleştirme yapılabilir)
+
                 vatsPayload.Add(new
                 {
                     code = code,

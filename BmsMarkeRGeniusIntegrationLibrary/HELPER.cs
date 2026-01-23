@@ -263,7 +263,7 @@ namespace BmsMarkeRGeniusIntegrationLibrary
                 if (AppUnity != null && AppUnity.Connected)
                     LOGO_LOGOUT();
                 AppUnity = new UnityObjects.UnityApplication();
-                if (!AppUnity.Login(USERNAME, PASSWORD, FIRMNR, 1))
+                if (!AppUnity.Login(USERNAME, PASSWORD, FIRMNR, 2))
                 {
                     var logoError = AppUnity.GetLastErrorString();
                     LOGYAZ($"LOGO_LOGIN başarısız - Hata: {(string.IsNullOrEmpty(logoError) ? "Boş hata mesajı" : logoError)}", null);
