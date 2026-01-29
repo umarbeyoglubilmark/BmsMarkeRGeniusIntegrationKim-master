@@ -165,8 +165,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
 
             try
             {
-                string strLogin = HELPER.LOGO_LOGIN(CFG.LOBJECTDEFAULTUSERNAME, CFG.LOBJECTDEFAULTPASSWORD, int.Parse(CFG.FIRMNR));
-                if (strLogin != "") throw new Exception(strLogin);
+                // SQL modu - Logo Objects login gereksiz
                 foreach (string branch in checkedBranches)
                 {
                     if (ce_OnlySalesWithCustomer.Checked)
@@ -195,7 +194,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
             }
             finally
             {
-                HELPER.LOGO_LOGOUT();
+                // SQL modu - Logo Objects logout gereksiz
             }
 
             if (errorList.Count > 0)
@@ -908,18 +907,18 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                 string res;
                 if (sale.posCode == "4")
                 {
-                    HELPER.LOGYAZ($"{logPrefix} Kasa 4 - InsertReturnInvoice çağrılıyor", null);
-                    res = HELPER.InsertReturnInvoice("120.YKF", branch, header, details, withCustomer: withCustomer, FIRMNR: CFG.FIRMNR, "BMS-NCR");
+                    HELPER.LOGYAZ($"{logPrefix} Kasa 4 - InsertReturnInvoiceSQL çağrılıyor", null);
+                    res = HelperSQL.InsertReturnInvoiceSQL("120.YKF", branch, header, details, withCustomer: withCustomer, FIRMNR: CFG.FIRMNR, "BMS-NCR", PERIODNR: CFG.PERIOD);
                 }
                 else if (header.FTYPE == "SATIS")
                 {
-                    HELPER.LOGYAZ($"{logPrefix} SATIS - InsertInvoice2 çağrılıyor", null);
-                    res = InsertInvoice2("120.YKF", branch, header, details, withCustomer: withCustomer, FIRMNR: CFG.FIRMNR);
+                    HELPER.LOGYAZ($"{logPrefix} SATIS - InsertInvoiceSQL çağrılıyor", null);
+                    res = HelperSQL.InsertInvoiceSQL("120.YKF", branch, header, details, withCustomer: withCustomer, FIRMNR: CFG.FIRMNR, PERIODNR: CFG.PERIOD);
                 }
                 else
                 {
-                    HELPER.LOGYAZ($"{logPrefix} IADE - InsertReturnInvoice çağrılıyor", null);
-                    res = HELPER.InsertReturnInvoice("120.YKF", branch, header, details, withCustomer: withCustomer, FIRMNR: CFG.FIRMNR, "BMS-NCR");
+                    HELPER.LOGYAZ($"{logPrefix} IADE - InsertReturnInvoiceSQL çağrılıyor", null);
+                    res = HelperSQL.InsertReturnInvoiceSQL("120.YKF", branch, header, details, withCustomer: withCustomer, FIRMNR: CFG.FIRMNR, "BMS-NCR", PERIODNR: CFG.PERIOD);
                 }
 
                 if (string.Equals(res, "ok", StringComparison.OrdinalIgnoreCase))
@@ -1080,9 +1079,9 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                         };
 
                         string result =
-                            ficheType.Equals("Cek Girisi", StringComparison.OrdinalIgnoreCase) ? HELPER.InsertCheque(branch, dto, CFG.FIRMNR) :
-                            ficheType.StartsWith("Kasa", StringComparison.OrdinalIgnoreCase) ? HELPER.InsertKsFiche(branch, dto, CFG.FIRMNR) :
-                                                                                                    HELPER.InsertCHFiche(branch, dto, CFG.FIRMNR);
+                            ficheType.Equals("Cek Girisi", StringComparison.OrdinalIgnoreCase) ? HelperSQL.InsertChequeSQL(branch, dto, CFG.FIRMNR, CFG.PERIOD) :
+                            ficheType.StartsWith("Kasa", StringComparison.OrdinalIgnoreCase) ? HelperSQL.InsertKsFicheSQL(branch, dto, CFG.FIRMNR, CFG.PERIOD) :
+                                                                                                    HelperSQL.InsertCHFicheSQL(branch, dto, CFG.FIRMNR, CFG.PERIOD);
 
                         if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
                             HELPER.LOGYAZ(result, null);
@@ -1166,7 +1165,7 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                 {
                     string sqlFormattedDate = date.ToString("MM/dd/yyyy") + " 00:00:00";
                     {
-                        string sqlQueryHeader = $@"SELECT FICHENO FROM LG_{CFG.FIRMNR}_01_INVOICE II WHERE II.TIME_=0 AND II.POSTRANSFERINFO=1 AND II.CYPHCODE='BMS' AND II.DATE_ = '{sqlFormattedDate}' AND II.BRANCH = {branch}";
+                        string sqlQueryHeader = $@"SELECT FICHENO FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_INVOICE II WHERE II.TIME_=0 AND II.POSTRANSFERINFO=1 AND II.CYPHCODE='BMS' AND II.DATE_ = '{sqlFormattedDate}' AND II.BRANCH = {branch}";
                         DataTable fhl = HELPER.SqlSelectLogo(sqlQueryHeader);
 
                         if (fhl.Rows.Count > 0)
@@ -1184,11 +1183,11 @@ namespace Integration.BmsMarkeRGeniusIntegrationCfg.Genius2Logo.Integration
                     }
                     {
                         string wherePos = $@"(SELECT DISTINCT CAST(GP.NR AS VARCHAR) AS NR FROM BMS_{CFG.FIRMNR}_MarkeRGenius_GeniusPos GP WITH(NOLOCK) )";
-                        string sqlQueryPayments = $@"SELECT TOP 1 LOGICALREF FROM LG_{CFG.FIRMNR}_01_CSROLL WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})
+                        string sqlQueryPayments = $@"SELECT TOP 1 LOGICALREF FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_CSROLL WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})
 UNION ALL
-SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_CLFICHE WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECCODE IN ({wherePos})
+SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_CLFICHE WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECCODE IN ({wherePos})
 UNION ALL
-SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})";
+SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})";
                         DataTable fhl = HELPER.SqlSelectLogo(sqlQueryPayments);
 
 
@@ -1284,7 +1283,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                 {
                     string sqlFormattedDate = date.ToString("MM/dd/yyyy") + " 00:00:00";
                     {
-                        string sqlQueryHeader = $@"SELECT FICHENO FROM LG_{CFG.FIRMNR}_01_INVOICE II WHERE II.TIME_=0 AND II.POSTRANSFERINFO=1 AND II.CYPHCODE='BMS' AND II.DATE_ = '{sqlFormattedDate}' AND II.BRANCH = {branch}";
+                        string sqlQueryHeader = $@"SELECT FICHENO FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_INVOICE II WHERE II.TIME_=0 AND II.POSTRANSFERINFO=1 AND II.CYPHCODE='BMS' AND II.DATE_ = '{sqlFormattedDate}' AND II.BRANCH = {branch}";
                         DataTable fhl = HELPER.SqlSelectLogo(sqlQueryHeader);
 
                         if (fhl.Rows.Count > 0)
@@ -1302,11 +1301,11 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                     }
                     {
                         string wherePos = $@"(SELECT DISTINCT CAST(GP.NR AS VARCHAR) AS NR FROM BMS_{CFG.FIRMNR}_MarkeRGenius_GeniusPos GP WITH(NOLOCK) )";
-                        string sqlQueryPayments = $@"SELECT TOP 1 LOGICALREF FROM LG_{CFG.FIRMNR}_01_CSROLL WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})
+                        string sqlQueryPayments = $@"SELECT TOP 1 LOGICALREF FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_CSROLL WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})
 UNION ALL
-SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_CLFICHE WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECCODE IN ({wherePos})
+SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_CLFICHE WITH(NOLOCK)  WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECCODE IN ({wherePos})
 UNION ALL
-SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})";
+SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='BMS' AND DATE_ = '{sqlFormattedDate}' AND BRANCH = {branch} AND SPECODE IN ({wherePos})";
                         DataTable fhl = HELPER.SqlSelectLogo(sqlQueryPayments);
 
 
@@ -1441,12 +1440,12 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                     if (item.FTYPE == "SATIS")
                     {
                         //SATIS FATURASI
-                        result = HELPER.InsertInvoice(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR);
+                        result = HelperSQL.InsertInvoiceSQL(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR, PERIODNR: CFG.PERIOD);
                     }
                     else if (item.FTYPE == "IADE")
                     {
                         //IADE FATURASI
-                        result = HELPER.InsertReturnInvoice(le_ReturnClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR, "BMS");
+                        result = HelperSQL.InsertReturnInvoiceSQL(le_ReturnClient.EditValue.ToString(), branch, item, fdl, false, CFG.FIRMNR, "BMS", PERIODNR: CFG.PERIOD);
                     }
                     if (result != "ok")
                     {
@@ -1517,15 +1516,15 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                     }
                     else if (item.LOGO_FICHE_TYPE == "Cek Girisi")
                     {
-                        result = HELPER.InsertCheque(branch, item, CFG.FIRMNR);
+                        result = HelperSQL.InsertChequeSQL(branch, item, CFG.FIRMNR, CFG.PERIOD);
                     }
                     else if (item.LOGO_FICHE_TYPE == "CH Kredi Karti" || item.LOGO_FICHE_TYPE == "CH Kredi Karti Iade" || item.LOGO_FICHE_TYPE == "CH Borc" || item.LOGO_FICHE_TYPE == "CH Alacak")
                     {
-                        result = HELPER.InsertCHFiche(branch, item, CFG.FIRMNR);
+                        result = HelperSQL.InsertCHFicheSQL(branch, item, CFG.FIRMNR, CFG.PERIOD);
                     }
                     else if (item.LOGO_FICHE_TYPE == "Kasa Tahsilat" || item.LOGO_FICHE_TYPE == "Kasa Odeme")
                     {
-                        result = HELPER.InsertKsFiche(branch, item, CFG.FIRMNR);
+                        result = HelperSQL.InsertKsFicheSQL(branch, item, CFG.FIRMNR, CFG.PERIOD);
                     }
                     if (result != "ok")
                     {
@@ -1588,12 +1587,12 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                     if (item.FTYPE == "SATIS")
                     {
                         //SATIS FATURASI
-                        result = HELPER.InsertInvoice(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR);
+                        result = HelperSQL.InsertInvoiceSQL(le_InvoiceClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR, PERIODNR: CFG.PERIOD);
                     }
                     else if (item.FTYPE == "IADE")
                     {
                         //IADE FATURASI
-                        result = HELPER.InsertReturnInvoice(le_ReturnClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR, "BMS");
+                        result = HelperSQL.InsertReturnInvoiceSQL(le_ReturnClient.EditValue.ToString(), branch, item, fdl, true, CFG.FIRMNR, "BMS", PERIODNR: CFG.PERIOD);
                     }
                     if (result != "ok")
                     {
@@ -1674,12 +1673,14 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
         {
             private readonly ILogger<LogoInvoiceHandler> _log;
             private readonly string _firmNr;
+            private readonly string _periodNr;
             private readonly string _defaultArpForCash;
 
             public LogoInvoiceHandler(ILogger<LogoInvoiceHandler> log, IOptions<SalesApiOptions> opt)
             {
                 _log = log;
                 _firmNr = /* CFG.FIRMNR */ "126";
+                _periodNr = /* CFG.PERIOD */ "02";
                 _defaultArpForCash = /* config/DB */ "";
             }
 
@@ -1729,11 +1730,11 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                         });
                     }
 
-                    // --- LOGO CALL ---
+                    // --- SQL INSERT ---
                     string branchStr = h.BRANCH.ToString();
                     string res = (h.FTYPE == "SATIS")
-                        ? InsertInvoice2(_defaultArpForCash, branchStr, h, details, withCustomer: !string.IsNullOrEmpty(h.CUSTOMER_CODE), FIRMNR: _firmNr)
-                        : HELPER.InsertReturnInvoice(_defaultArpForCash, branchStr, h, details, withCustomer: !string.IsNullOrEmpty(h.CUSTOMER_CODE), FIRMNR: _firmNr, "BMS-NCR");
+                        ? HelperSQL.InsertInvoiceSQL(_defaultArpForCash, branchStr, h, details, withCustomer: !string.IsNullOrEmpty(h.CUSTOMER_CODE), FIRMNR: _firmNr, PERIODNR: _periodNr)
+                        : HelperSQL.InsertReturnInvoiceSQL(_defaultArpForCash, branchStr, h, details, withCustomer: !string.IsNullOrEmpty(h.CUSTOMER_CODE), FIRMNR: _firmNr, "BMS-NCR", PERIODNR: _periodNr);
 
                     if (!string.Equals(res, "ok", StringComparison.OrdinalIgnoreCase))
                         _log.LogError("Logo post failed for {DocNo}: {Err}", h.DOCUMENT_NO, res);
@@ -2069,15 +2070,15 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                         string result;
                         if (ficheType.Equals("Cek Girisi", StringComparison.OrdinalIgnoreCase))
                         {
-                            result = HELPER.InsertCheque(branch, dto, "126"); // cheque in
+                            result = HelperSQL.InsertChequeSQL(branch, dto, "126", CFG.PERIOD); // cheque in
                         }
                         else if (ficheType.StartsWith("Kasa", StringComparison.OrdinalIgnoreCase))
                         {
-                            result = HELPER.InsertKsFiche(branch, dto, "126"); // cash receipt/payment
+                            result = HelperSQL.InsertKsFicheSQL(branch, dto, "126", CFG.PERIOD); // cash receipt/payment
                         }
                         else
                         {
-                            result = HELPER.InsertCHFiche(branch, dto, "126"); // bank / AR/AP voucher
+                            result = HelperSQL.InsertCHFicheSQL(branch, dto, "126", CFG.PERIOD); // bank / AR/AP voucher
                         }
 
                         if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
@@ -2453,18 +2454,10 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
         }
         public static void G3IntegrationDebtClose(string branchNr, string sqlFormattedDateStart, string sqlFormattedDateEnd)
         {
-            // HATA #2: Aşağıdaki satırı SİLİN: "CONFIG CFG;"
-            
-
-        
-            var loginErr = HELPER.LOGO_LOGIN(CFG.LOBJECTDEFAULTUSERNAME, CFG.LOBJECTDEFAULTPASSWORD, int.Parse(CFG.FIRMNR));
-            if (!string.IsNullOrEmpty(loginErr))
-               throw new Exception(loginErr);
-
+            // SQL modu - Logo Objects login gereksiz
             try
             {
                 var errorList = new List<Bms_Errors>();
-                // HATA #1: DebtClose’ı static yapacağız ve doğrudan çağıracağız
                 DebtClose(errorList, branchNr, sqlFormattedDateStart, sqlFormattedDateEnd, 1);
                 DebtClose(errorList, branchNr, sqlFormattedDateStart, sqlFormattedDateEnd, 2);
                 DebtClose(errorList, branchNr, sqlFormattedDateStart, sqlFormattedDateEnd, 3);
@@ -2475,7 +2468,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
             }
             finally
             {
-                HELPER.LOGO_LOGOUT();
+                // SQL modu - Logo Objects logout gereksiz
             }
 
         }
@@ -2585,8 +2578,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
 
             var sum = new RunSummary();
 
-            var loginErr = HELPER.LOGO_LOGIN(CFG.LOBJECTDEFAULTUSERNAME, CFG.LOBJECTDEFAULTPASSWORD, int.Parse(CFG.FIRMNR));
-            if (!string.IsNullOrEmpty(loginErr)) throw new Exception(loginErr);
+            // SQL modu - Logo Objects login gereksiz
 
             try
             {
@@ -2628,7 +2620,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
             }
             finally
             {
-                HELPER.LOGO_LOGOUT();
+                // SQL modu - Logo Objects logout gereksiz
             }
 
             // >>> Eski davranışa geri dön: hata varsa formu aç, yoksa başarı göster
@@ -2652,7 +2644,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                     SELECT COUNT(*) AS FaturaAdedi,
                            ISNULL(SUM(GROSSTOTAL), 0) AS BrutToplam,
                            ISNULL(SUM(NETTOTAL), 0) AS NetToplam
-                    FROM LG_{CFG.FIRMNR}_01_INVOICE WITH(NOLOCK)
+                    FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_INVOICE WITH(NOLOCK)
                     WHERE DATE_ BETWEEN '{dateStart} 00:00:00.000' AND '{dateEnd} 23:59:59.000'
                     AND CYPHCODE = 'BMS-NCR'
                     AND TRCODE IN (2, 7, 8)";  // 2=Satış İade, 7=Perakende Satış, 8=Perakende İade
@@ -2680,7 +2672,7 @@ SELECT LOGICALREF FROM LG_{CFG.FIRMNR}_01_KSLINES  WITH(NOLOCK) WHERE CYPHCODE='
                 string logoIadeQuery = $@"
                     SELECT COUNT(*) AS IadeAdedi,
                            ISNULL(SUM(NETTOTAL), 0) AS IadeToplam
-                    FROM LG_{CFG.FIRMNR}_01_INVOICE WITH(NOLOCK)
+                    FROM LG_{CFG.FIRMNR}_{CFG.PERIOD}_INVOICE WITH(NOLOCK)
                     WHERE DATE_ BETWEEN '{dateStart} 00:00:00.000' AND '{dateEnd} 23:59:59.000'
                     AND CYPHCODE = 'BMS-NCR'
                     AND TRCODE IN (2, 8)";  // 2=Satış İade, 8=Perakende İade

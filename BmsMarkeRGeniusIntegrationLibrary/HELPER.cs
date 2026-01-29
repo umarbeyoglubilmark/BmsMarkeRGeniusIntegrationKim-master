@@ -263,11 +263,30 @@ namespace BmsMarkeRGeniusIntegrationLibrary
                 if (AppUnity != null && AppUnity.Connected)
                     LOGO_LOGOUT();
                 AppUnity = new UnityObjects.UnityApplication();
+
+                LOGYAZ($"LOGO_LOGIN - UnityApplication oluşturuldu, Connected: {AppUnity.Connected}", null);
+
+                // Önce Logo Object Host'a bağlan
+                if (!AppUnity.Connect())
+                {
+                    var connectError = AppUnity.GetLastErrorString();
+                    LOGYAZ($"LOGO_LOGIN - Connect() başarısız: {(string.IsNullOrEmpty(connectError) ? "Boş hata" : connectError)}", null);
+                    throw new Exception($"Logo Object Host'a bağlanılamadı. Servis çalışıyor mu? Hata: {(string.IsNullOrEmpty(connectError) ? "Bilinmiyor" : connectError)}");
+                }
+
+                LOGYAZ($"LOGO_LOGIN - Connect() başarılı, Connected: {AppUnity.Connected}", null);
+
                 if (!AppUnity.Login(USERNAME, PASSWORD, FIRMNR, 2))
                 {
-                    var logoError = AppUnity.GetLastErrorString();
-                    LOGYAZ($"LOGO_LOGIN başarısız - Hata: {(string.IsNullOrEmpty(logoError) ? "Boş hata mesajı" : logoError)}", null);
-                    throw new Exception(string.IsNullOrEmpty(logoError) ? "Logo giriş başarısız (hata mesajı yok)" : logoError);
+                    var logoErrorString = AppUnity.GetLastErrorString();
+                    var detailedError = $"ErrorString: {(string.IsNullOrEmpty(logoErrorString) ? "Boş" : logoErrorString)}, " +
+                                       $"Connected: {AppUnity.Connected}, LoggedIn: {AppUnity.LoggedIn}";
+                    LOGYAZ($"LOGO_LOGIN başarısız - {detailedError}", null);
+
+                    string userMessage = string.IsNullOrEmpty(logoErrorString)
+                        ? "Logo giriş başarısız - Logo Object Host servisi çalışıyor mu? Kullanıcı/şifre doğru mu? LO yetkisi var mı?"
+                        : logoErrorString;
+                    throw new Exception(userMessage);
                 }
 
                 strresult = "";

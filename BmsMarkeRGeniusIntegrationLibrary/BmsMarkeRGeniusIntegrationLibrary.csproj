@@ -80,6 +80,7 @@
   <ItemGroup>
     <Compile Include="CONFIG.cs" />
     <Compile Include="HELPER.cs" />
+    <Compile Include="HelperSQL.cs" />
     <Compile Include="METHODS\AuthApi.cs" />
     <Compile Include="METHODS\MODELS\Bmsf_XXX_MarkeRGeniusIntegration_Malzemeler.cs" />
     <Compile Include="METHODS\MODELS\Bms_Errors.cs" />
